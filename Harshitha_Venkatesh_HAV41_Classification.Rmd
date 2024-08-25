@@ -1,0 +1,1384 @@
+---
+title: "Classification iii"
+output: html_document
+date: "2024-04-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Packages
+
+The tidyverse is loaded in for you in the code chunk below. The visualization package, ggplot2, and the data manipulation package, dplyr, are part of the “larger” tidyverse.
+
+```{r load_packages}
+library(tidyverse)
+```
+The modelr package is loaded in for you in the code chunk below. You may use functions from modelr to calculate performance metrics for your models.
+
+```{r load_packages1}
+library(modelr)
+```
+
+The caret package to manage all aspects of data splitting, training, and evaluating the models.
+
+```{r load_packages2}
+library(caret)
+```
+
+## Import Data
+
+```{r read_train_data}
+# Importing training data
+train_data_path <- 'paint_project_train_data.csv'
+df_train <- readr::read_csv(train_data_path, col_names = TRUE)
+```
+
+```{r glimpse}
+df_train %>% glimpse()
+```
+
+**Levels of the binary outcome**
+
+```{r count}
+df_train %>% count(outcome)
+```
+
+Convert Categorical Variables to Factors to ensure that the categorical variables are treated as factors.
+
+```{r factors}
+df_train$Lightness <- as.factor(df_train$Lightness)
+df_train$Saturation <- as.factor(df_train$Saturation)
+```
+
+Use the mean() function to determine the fraction (or proportion) of the observations that correspond to the event of interest. Is the data set a balanced data set?
+
+```{r interest}
+proportion_of_interest <- mean(df_train$outcome)
+proportion_of_interest
+```
+
+
+```{r df_caretglimse}
+df_caret <- df_train %>% 
+  mutate(outcome = ifelse(outcome == 1, 'event', 'non_event')) %>% 
+  mutate(outcome = factor(outcome, levels = c("event", "non_event"))) %>% 
+  select(R, G, B,Lightness, Saturation, Hue, response, outcome)
+
+df_caret %>% glimpse()
+
+```
+
+
+
+## Part iii: Classification 
+
+## Part iiia : Classification-GLM
+
+1. Intercept-only model: No input variables
+
+```{r model1}
+mod1 <- glm(outcome ~ 1, family = binomial, data = df_train)
+```
+
+
+2. Categorical variables only – linear additive
+
+```{r model2}
+mod2 <- glm(outcome ~ Lightness + Saturation, family = binomial, data = df_train)
+```
+
+3. Continuous variables only – linear additive
+
+```{r model3}
+mod3 <- glm(outcome ~ R + G + B + Hue + response, family = binomial, data = df_train)
+```
+
+
+4. All categorical and continuous variables – linear additive
+
+```{r model4}
+mod4 <- glm(outcome ~ Lightness + Saturation + R + G + B + Hue + response, family = binomial, data = df_train)
+```
+
+5. Interaction of the categorical inputs with all continuous inputs main effects
+
+```{r model5}
+mod5 <- glm(outcome ~ Lightness * (R + G + B + Hue + response) + Saturation * (R + G + B + Hue + response), family = binomial,data = df_train)
+```
+
+6. Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+
+```{r model6}
+mod6 <- glm(outcome ~ Lightness + Saturation + (R + G + B + Hue + response)^2, family = binomial, data = df_train)
+```
+
+7.Interaction of the categorical inputs with all main effect and all pairwise interactions of continuous inputs
+
+```{r model7}
+mod7 <-  glm(outcome ~ Lightness * (R + G + B + Hue + response)^2 + Saturation * (R + G + B + Hue + response)^2, family = binomial, data = df_train)
+```
+
+8.Polynomial transformations for the continuous variables R, G, and B, as their distributions.
+
+```{r model8}
+mod8 <-  glm(outcome ~ poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue + Lightness + Saturation, family = binomial, data = df_train)
+```
+
+9.Interaction terms between the polynomial-transformed continuous variables and the categorical variables
+
+```{r model9}
+mod9 <-  glm(outcome ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue) * (Lightness + Saturation), family = binomial, data = df_train)
+```
+10. Interaction terms between the polynomial-transformed continuous variables themselves
+
+```{r model10}
+mod10 <-  glm(outcome ~ poly(R, 2) * poly(G, 2) + poly(R, 2) * poly(B, 2) + poly(R, 2) * poly(Hue, 2) + poly(G, 2) * poly(B, 2) + poly(G, 2) * poly(Hue, 2) + poly(B, 2) * poly(Hue, 2), family = binomial, data = df_train)
+```
+During the fitting of the generalized linear models for classification, the warning "glm.fit: fitted probabilities numerically 0 or 1 occurred" is commonly encountered in logistic regression. This warning indicates potential issues with complete or quasi-complete separation in the data, which can affect the reliability and interpretation of the model's coefficients.
+
+
+**AIC and BIC metrics used to find the best performing model**
+
+```{r AIC}
+model_aic <- tibble(
+  Model = c("mod1", "mod2", "mod3", "mod4", "mod5", "mod6", "mod7", "mod8","mod9", "mod10"),
+  AIC = c(
+    broom::glance(mod1)$AIC,
+    broom::glance(mod2)$AIC,
+    broom::glance(mod3)$AIC,
+    broom::glance(mod4)$AIC,
+    broom::glance(mod5)$AIC,
+    broom::glance(mod6)$AIC,
+    broom::glance(mod7)$AIC,
+    broom::glance(mod8)$AIC,
+    broom::glance(mod9)$AIC,
+    broom::glance(mod10)$AIC
+  )
+)
+
+model_aic <- model_aic %>%
+arrange(AIC)
+
+
+model_aic
+```
+
+```{r BIC}
+model_bic <- tibble(
+  Model = c("mod1", "mod2", "mod3", "mod4", "mod5", "mod6", "mod7", "mod8","mod9", "mod10"),
+  BIC = c(
+    broom::glance(mod1)$BIC,
+    broom::glance(mod2)$BIC,
+    broom::glance(mod3)$BIC,
+    broom::glance(mod4)$BIC,
+    broom::glance(mod5)$BIC,
+    broom::glance(mod6)$BIC,
+    broom::glance(mod7)$BIC,
+    broom::glance(mod8)$BIC,
+    broom::glance(mod9)$BIC,
+    broom::glance(mod10)$BIC
+  )
+)
+
+model_bic <- model_bic %>%
+arrange(BIC)
+
+
+model_bic
+```
+
+The analysis of model performance using AIC and BIC metrics reveals that model 10 is identified as the best according  AIC and BIC.
+
+
+**Visualize the coefficient summaries for your top 3 models**
+
+```{r CoefPlot1}
+library(coefplot)
+multi_coef_plot <- coefplot::multiplot(mod10, mod6, mod9, dodgeHeight = 0.9) +
+theme_bw()
+multi_coef_plot
+```
+```{r CoefPlotSummary1}
+summary_mod10 <- summary(mod10)$coefficients
+summary_mod10
+```
+```{r CoefPlotSummary2}
+summary_mod6 <- summary(mod6)$coefficients
+summary_mod6
+```
+```{r CoefPlotSummary3}
+summary_mod9 <- summary(mod9)$coefficients
+summary_mod9
+```
+In comparing the coefficient summaries of the top three models (`mod10`, `mod6`, and `mod9`), `mod10` stands out for its broad set of important predictors, including various levels of `Lightness` and `Saturation`, as well as `B`, `G`, and interactions involving `R`. `mod6` focuses more on specific interactions and quadratic terms (`poly(B, 2)1` and `poly(B, 2)2`), along with `Lightness` and `Saturation` components. `mod9` emphasizes interactions between quadratic terms of `R`, `G`, `B`, and `Hue`, indicating a more nuanced relationship between these variables. Key predictors across these models include `Saturationgray`, `B`, `Lightnesssaturated`, `Lightnesssoft`, `Lightnessmidtone`, `Lightnesspale`, `Lightnesslight`, `Lightnessdeep`, `Saturationshaded`, `Saturationsubdued`, and `G`, with other predictors like `R`, `Hue`, `Saturationmuted`, `Saturationpure`, and `response` also showing relevance but to a lesser extent.
+
+The importance of color characteristics in predicting the outcome variable is evident across the top three models (`mod10`, `mod6`, and `mod9`). Saturation levels, represented by variables such as `Saturationgray`, `Saturationneutral`, `Saturationshaded`, and `Saturationsubdued`, play a consistent role, indicating that the intensity or purity of colors is a key factor. Additionally, different levels of lightness (`Lightnessdeep`, `Lightnesssoft`, `Lightnessmidtone`, `Lightnesspale`, `Lightnesslight`) are highlighted, suggesting that the brightness or darkness of colors is relevant. The `B` (blue) component of colors is significant, as shown by `poly(B, 2)1` and `poly(B, 2)2` in `mod6`, indicating a quadratic effect. The `G` (green) component is also important, as seen in `mod10` and `mod9`. Interactions between color components, such as `poly(R, 2)1:poly(G, 2)1`, `poly(R, 2)1:poly(Hue, 2)1`, and `poly(R, 2)1:poly(B, 2)1` in `mod9`, underscore the complexity of color relationships in predicting the outcome. While other variables like `response`, `R`, `Hue`, and `Saturationmuted` also show relevance, they are generally less impactful compared to saturation, lightness, and specific color components.
+
+## Part iiib : Classification -  Bayesian GLM
+
+**Design Matrix**
+
+Model 9 was chosen as the second model in the analysis because it offers a more complex interaction between the predictors, potentially capturing non-linear relationships and interactions that the best model may miss. This complexity could lead to a better fit for the data, especially if there are non-linear relationships or interactions among the predictors that are important for predicting the outcome variable.
+
+
+```{r Design_matrix}
+Xmat_9 <- model.matrix( mod9$formula, data = df_train )
+
+Xmat_10 <- model.matrix( mod10$formula, data = df_train)
+```
+
+The log-posterior function you will program requires the design matrix, the observed output vector, and the prior specification.
+
+```{r info}
+
+info_9 <- list(
+  yobs = df_train$outcome,
+  design_matrix = Xmat_9,
+  mu_beta = 0,
+  tau_beta = 4.5
+)
+
+info_10 <- list(
+  yobs = df_train$outcome,
+  design_matrix = Xmat_10,
+  mu_beta = 0,
+  tau_beta = 4.5
+)
+```
+
+**Log-posterior function for logistic regression**
+
+```{r Log_posterior}
+
+logistic_logpost <- function(unknowns, my_info)
+{
+  # extract the design matrix and assign to X
+  X <- my_info$design_matrix
+  
+  # calculate the linear predictor
+  eta <- as.vector( X %*% as.matrix(unknowns))
+  
+  # calculate the event probability
+  mu <- boot::inv.logit(eta)
+  
+  # evaluate the log-likelihood
+  log_lik <- sum(dbinom(x = my_info$yobs,
+                        size = 1, 
+                        prob = mu,
+                        log = TRUE))
+  
+  # evaluate the log-prior
+  log_prior <- sum(dnorm(x = unknowns,
+                         mean = my_info$mu_beta,
+                         sd = my_info$tau_beta,
+                         log = TRUE))
+  
+  # sum together
+  log_lik + log_prior
+}
+
+
+
+
+```
+
+
+my_laplace() function 
+
+```{r LaplaceFn}
+my_laplace <- function(start_guess, logpost_func, ...)
+{
+  # code adapted from the `LearnBayes`` function `laplace()`
+  fit <- optim(start_guess,
+               logpost_func,
+               gr = NULL,
+               ...,
+               method = "BFGS",
+               hessian = TRUE,
+               control = list(fnscale = -1, maxit = 5001))
+  
+  mode <- fit$par
+  post_var_matrix <- -solve(fit$hessian)
+  p <- length(mode)
+  int <- p/2 * log(2 * pi) + 0.5 * log(det(post_var_matrix)) + logpost_func(mode, ...)
+  # package all of the results into a list
+  list(mode = mode,
+       var_matrix = post_var_matrix,
+       log_evidence = int,
+       converge = ifelse(fit$convergence == 0,
+                         "YES", 
+                         "NO"),
+       iter_counts = as.numeric(fit$counts[1]))
+}
+
+```
+
+
+```{r LaplaceFnModel}
+
+laplace_9 <- my_laplace(rep(0, ncol(Xmat_9)), logistic_logpost, info_9)
+
+laplace_10 <- my_laplace(rep(0, ncol(Xmat_10)), logistic_logpost, info_10)
+
+
+```
+
+
+
+**Best Model using the Evidence based approach**
+
+```{r BestModel}
+
+mod_log_evidences <- purrr::map_dbl(
+  list(laplace_10, laplace_9),
+  ~ .x$log_evidence
+)
+
+all_model_weights <- exp(mod_log_evidences) / sum(exp(mod_log_evidences))
+
+```
+
+```{r BestModelPlot}
+tibble::tibble(
+  model_name = c("L10", "L9"),
+  post_model_weight = all_model_weights
+) %>% 
+  ggplot(aes(x = model_name, y = post_model_weight, fill = model_name)) +
+  geom_bar(stat = 'identity') +
+  coord_cartesian(ylim = c(0,1)) +
+  labs(title = "Posterior Model Weights", x = "Model Name", y = "Posterior Model Weight") +
+  theme_bw()
+
+```
+The model L9 has a weight of 1.00, and L10 has a weight close to 0. This indicates that model L9 is considered the best model in comparison to L10, based on the posterior model weights displayed.
+
+**Visualize the regression coefficient posterior summary statistics for your best model**
+
+```{r RegressionCoefPlot}
+coefplot(mod9)
+```
+```{r RegressionCoef}
+coef(mod9)
+```
+
+
+## Part iiic : Classification - GLM Predictions
+
+```{r viz_grid}
+viz_grid <- expand.grid(R = unique(df_train$R),
+                        G = unique(df_train$G),
+                        B = unique(df_train$B),
+                        Lightness = unique(df_train$Lightness),
+                        KEEP.OUT.ATTRS = FALSE,
+                        stringsAsFactors = FALSE) %>% 
+  as.data.frame() %>% tibble::as_tibble()
+
+viz_grid %>% glimpse()
+
+```
+generate_lm_post_samples() function
+
+```{r generate_glm_post_samples}
+generate_glm_post_samples <- function(mvn_result, num_samples)
+{
+  # specify the number of unknown beta parameters
+  length_beta <- length(mvn_result$mode)
+  
+  # generate the random samples
+  beta_samples <- MASS::mvrnorm(n = num_samples,
+                                mu = mvn_result$mode,
+                                Sigma = mvn_result$var_matrix)
+  
+  # change the data type and name
+  beta_samples %>% 
+    as.data.frame() %>% tibble::as_tibble() %>% 
+    purrr::set_names(sprintf("beta_%02d", (1:length_beta) - 1))
+}
+```
+
+post_logistic_pred_samples() Function
+
+```{r post_logistic_pred_samples}
+post_logistic_pred_samples <- function(Xnew, Bmat)
+{
+  # calculate the linear predictor at all prediction points and posterior samples
+  eta_mat <- Xnew %*% t(Bmat)
+  
+  # calculate the event probability
+  mu_mat <- boot::inv.logit(eta_mat)
+  
+  # book keeping
+  list(eta_mat = eta_mat, mu_mat = mu_mat)
+}
+```
+
+
+summarize_logistic_pred_from_laplace() Function
+
+```{r summarize_logistic_pred_from_laplace}
+summarize_logistic_pred_from_laplace <- function(mvn_result, Xtest, num_samples)
+{
+  # generate posterior samples of the beta parameters
+  betas <- generate_glm_post_samples(mvn_result, num_samples)
+  
+  # data type conversion
+  betas <- as.matrix(betas)
+  
+  # make posterior predictions on the test set
+  pred_test <- post_logistic_pred_samples(Xtest, betas)
+  
+  # calculate summary statistics on the posterior predicted probability
+  # summarize over the posterior samples
+  
+  # posterior mean, should you summarize along rows (rowMeans) or 
+  # summarize down columns (colMeans) ???
+  mu_avg <- rowMeans(pred_test$mu_mat)
+  
+  # posterior quantiles
+  mu_q05 <- apply(pred_test$mu_mat, 1, stats::quantile, probs = 0.05)
+  mu_q95 <- apply(pred_test$mu_mat, 1, stats::quantile, probs = 0.95)
+  
+  # book keeping
+  tibble::tibble(
+    mu_avg = mu_avg,
+    mu_q05 = mu_q05,
+    mu_q95 = mu_q95
+  ) %>% 
+    tibble::rowid_to_column("pred_id")
+}
+```
+
+Define the vizualization grid design matrices 
+
+```{r vizualization_grid}
+Xviz_9 <- model.matrix( mod9$formula, data = df_train )
+Xviz_10 <- model.matrix( mod10$formula, data = df_train)
+```
+
+Summarize the posterior predicted event probability associated with the two models on the visualization grid
+
+```{r post_pred_summary}
+set.seed(8123) 
+
+post_pred_summary_9 <- summarize_logistic_pred_from_laplace(laplace_9, Xviz_9, 2500)
+
+post_pred_summary_10 <- summarize_logistic_pred_from_laplace(laplace_10, Xviz_10, 2500)
+```
+
+
+```{r post_pred_summary_9}
+post_pred_summary_9 %>% dim()
+```
+```{r post_pred_summary_mean9}
+post_pred_summary_9
+```
+
+
+```{r post_pred_summary_10}
+post_pred_summary_10 %>% dim()
+```
+```{r post_pred_summary_mean10}
+post_pred_summary_10
+```
+
+
+```{r viz_bayes_logpost_preds}
+
+viz_bayes_logpost_preds <- function(post_pred_summary, input_df)
+{
+  post_pred_summary %>% 
+    left_join(input_df %>% tibble::rowid_to_column('pred_id'),
+              by = 'pred_id') %>% 
+    ggplot(mapping = aes(x = R)) +
+    geom_ribbon(mapping = aes(ymin = mu_q05,
+                              ymax = mu_q95,
+                              group = interaction(Lightness, G),
+                              fill = as.factor(Lightness)),
+                alpha = 0.25) +
+    geom_line(mapping = aes(y = mu_avg,
+                            group = interaction(Lightness, G),
+                            color = as.factor(Lightness)),
+              size = 1.15) +
+    facet_wrap(~ G, labeller = 'label_both') +
+    labs(y = "Event Probability", x = "Red Color Intensity (R)") +
+    theme_bw()
+}
+
+
+```
+
+```{r post_pred_summary_9_plot}
+viz_bayes_logpost_preds(post_pred_summary_9, viz_grid)
+
+```
+
+```{r post_pred_summary_10_plot1}
+viz_bayes_logpost_preds(post_pred_summary_10, viz_grid)
+
+```
+
+
+Upon reviewing the graphical outputs of the two generalized linear models, it appears that there may be some variation in the predictive trends between them. The trends represent the relationship between the red color intensity and the event probability when the lightness is characterized as "dark" across different levels of green intensity. In both sets of graphs, as we look across the panels corresponding to different levels of green intensity, we should expect to see similar patterns if the models are consistent. Specifically, if increases or decreases in red intensity result in similar changes in event probability across both models, and if the variability captured by the confidence intervals is alike, we could conclude the trends are consistent. Visually, the trends should display corresponding shapes and directions for each level of green intensity to assert consistency. 
+
+
+## Part iiid : Classification - Train/tune with resampling
+
+
+```{r df_caret2}
+df_caret <- df_train %>% 
+  mutate(outcome = ifelse(outcome == 1, 'event', 'non_event')) %>% 
+  mutate(outcome = factor(outcome, levels = c("event", "non_event"))) %>% 
+  select(R, G, B,Lightness, Saturation, Hue, response, outcome)
+
+df_caret %>% glimpse()
+
+```
+
+
+```{r  trainControl}
+my_ctrl <- trainControl(method = 'repeatedcv', number = 10, repeats = 3)
+my_metric <- "Accuracy"
+```
+
+**Generalized linear models**
+
+1. All categorical and continuous variables
+
+```{r  glm_default_01}
+set.seed(1234)  
+glm_default_01 <- train(outcome ~ Lightness + Saturation + R + G + B + Hue + response,
+                       data = df_caret,
+                       method = 'glm',
+                       metric = my_metric,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl,
+                       trace = FALSE)
+
+glm_default_01
+```
+
+2.Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+
+
+```{r  glm_default_02}
+set.seed(1234)  
+glm_default_02 <- train(outcome ~ Lightness + Saturation + (R + G + B + Hue + response)^2,
+                       data = df_caret,
+                       method = 'glm',
+                       metric = my_metric,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl,
+                       trace = FALSE)
+
+glm_default_02
+```
+
+3.  Continuous variables only
+
+```{r  glm_default_03}
+set.seed(1234)  
+glm_default_03 <- train(outcome ~ R + G + B + Hue + response,
+                       data = df_caret,
+                       method = 'glm',
+                       metric = my_metric,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl,
+                       trace = FALSE)
+
+glm_default_03
+```
+
+
+4. Polynomial transformations for the continuous variables R, G, and B, as their distributions.
+
+
+```{r  glm_default_04}
+set.seed(1234)  
+glm_default_04 <- train(outcome ~ poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue + Lightness + Saturation,
+                       data = df_caret,
+                       method = 'glm',
+                       metric = my_metric,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl,
+                       trace = FALSE)
+
+glm_default_04
+```
+**Best performing model: my_metric - Accuracy**
+
+```{r  results_modelGLM}
+
+accuracy_model1 <- mean(glm_default_01$results$Accuracy)
+accuracy_model2 <- mean(glm_default_02$results$Accuracy)
+accuracy_model3 <- mean(glm_default_03$results$Accuracy)
+accuracy_model4 <- mean(glm_default_04$results$Accuracy)
+
+
+model_accuracies_glm <- tibble(
+  Model = c("glm_default_01", "glm_default_02", "glm_default_03", "glm_default_04"),
+  Accuracy = c(accuracy_model1, accuracy_model2, accuracy_model3, accuracy_model4)
+)
+
+
+model_accuracies_glm <- model_accuracies_glm %>% 
+  arrange(desc(Accuracy))
+
+print(model_accuracies_glm)
+
+
+
+```
+
+
+The model labeled `glm_default_04` has an accuracy of 0.8239918, which means it correctly predicts the outcome of the classification task about 82.39% of the time. This accuracy rate is the highest among all the models created, indicating that `glm_default_04` is the most effective in predicting the outcome compared to the other models.
+
+
+```{r  results_model_plotGlm}
+
+ggplot(model_accuracies_glm, aes(x = reorder(Model, -Accuracy), y = Accuracy, group = 1)) +
+  geom_line(color="violet", size = 1) +  
+  geom_point(color="violet",size = 3) + 
+  labs(x = "Model", y = "Accuracy", title = "GLM Best Model Accuracy") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "bottom")
+
+```
+
+
+The model labeled `glm_default_04` has an accuracy of 0.8212046, which means it correctly predicts the outcome of the classification task about 82.12% of the time. This accuracy rate is the highest among all the models you've created, indicating that `glm_default_04` is the most effective in predicting the outcome compared to the other models.
+
+
+**Regularized regression with Elastic net**
+
+
+1. Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+
+```{r  enet_default_01}
+set.seed(1234)
+
+enet_default_01 <- train(outcome ~ Lightness + Saturation + (R + G + B + Hue + response)^2,                      data = df_caret,
+                       method = 'glmnet',
+                       metric = my_metric,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl,
+                       trace = FALSE)
+
+enet_default_01
+```
+
+
+
+2. Interaction of the categorical inputs with all continuous inputs main effects
+
+```{r  enet_default_02}
+set.seed(1234)
+
+enet_default_02 <- train(outcome ~ Lightness * (R + G + B + Hue + response) + Saturation * (R + G + B + Hue + response),
+                       data = df_caret,
+                       method = 'glmnet',
+                       metric = my_metric,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl,
+                       trace = FALSE)
+
+enet_default_02
+```
+
+
+3.Polynomial transformations for the continuous variables R, G, and B, as their distributions.
+
+```{r  enet_default_03}
+set.seed(1234)
+
+enet_default_03 <- train(outcome ~ poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue + Lightness + Saturation,
+                       data = df_caret,
+                       method = 'glmnet',
+                       metric = my_metric,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl,
+                       trace = FALSE)
+
+enet_default_03
+```
+
+A custom tuning grid to further tune the elastic net lambda and alpha tuning parameters.
+
+```{r  my_lambda_grid_01 }
+my_lambda_grid_01 <- exp(seq(log(min(enet_default_01$results$lambda)),
+                          log(max(enet_default_01$results$lambda)),
+                          length.out = 25))
+
+
+enet_grid_01 <- expand.grid(alpha = seq(0.1, 1.0, by = 0.1),
+                         lambda = my_lambda_grid_01)
+
+
+enet_grid_01 %>% dim()
+```
+
+```{r  my_lambda_grid_02}
+my_lambda_grid_02 <- exp(seq(log(min(enet_default_02$results$lambda)),
+                          log(max(enet_default_02$results$lambda)),
+                          length.out = 25))
+
+
+enet_grid_02 <- expand.grid(alpha = seq(0.1, 1.0, by = 0.1),
+                         lambda = my_lambda_grid_02)
+
+
+enet_grid_02 %>% dim()
+```
+
+```{r  my_lambda_grid_03}
+my_lambda_grid_03 <- exp(seq(log(min(enet_default_03$results$lambda)),
+                          log(max(enet_default_03$results$lambda)),
+                          length.out = 25))
+
+
+enet_grid_03 <- expand.grid(alpha = seq(0.1, 1.0, by = 0.1),
+                         lambda = my_lambda_grid_03)
+
+
+enet_grid_03 %>% dim()
+```
+Train, assess, and tune the elastic net model with the custom tuning grid 
+
+```{r  enet_tune_01}
+set.seed(1234)
+enet_tune_01 <- train(outcome ~ Lightness + Saturation + (R + G + B + Hue + response)^2,
+                   data = df_caret,
+                   method = 'glmnet',
+                   metric = my_metric,
+                   tuneGrid = enet_grid_01,
+                   preProcess = c("center", "scale"),
+                   trControl = my_ctrl)
+
+plot(enet_tune_01, xTrans = log)
+```
+
+
+```{r  enet_tune_02}
+set.seed(1234)
+enet_tune_02 <- train(outcome ~ Lightness * (R + G + B + Hue + response) + Saturation * (R + G + B + Hue + response),
+                   data = df_caret,
+                   method = 'glmnet',
+                   metric = my_metric,
+                   tuneGrid = enet_grid_02,
+                   preProcess = c("center", "scale"),
+                   trControl = my_ctrl)
+
+plot(enet_tune_02, xTrans = log)
+```
+
+
+```{r  enet_tune_03}
+set.seed(1234)
+enet_tune_03 <- train(outcome ~ poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue + Lightness + Saturation,
+                   data = df_caret,
+                   method = 'glmnet',
+                   metric = my_metric,
+                   tuneGrid = enet_grid_03,
+                   preProcess = c("center", "scale"),
+                   trControl = my_ctrl)
+
+plot(enet_tune_03, xTrans = log)
+```
+
+
+```{r  bestmodelenet}
+
+accuracy_model1e <- mean(enet_tune_01$results$Accuracy)
+accuracy_model2e <- mean(enet_tune_02$results$Accuracy)
+accuracy_model3e <- mean(enet_tune_03$results$Accuracy)
+
+
+
+model_accuracies_enet <- tibble(
+  Model = c("enet_tune_01", "enet_tune_02", "enet_tune_03"),
+  Accuracy = c(accuracy_model1e, accuracy_model2e, accuracy_model3e)
+)
+
+
+model_accuracies_enet <- model_accuracies_enet %>% 
+  arrange(desc(Accuracy))
+
+print(model_accuracies_enet)
+
+```
+
+
+```{r  results_model_plotenet}
+
+ggplot(model_accuracies_enet, aes(x = reorder(Model, -Accuracy), y = Accuracy, group = 1)) +
+  geom_line(color="lightgreen", size = 1) +  
+  geom_point(color="lightgreen",size = 3) + 
+  labs(x = "Model", y = "Accuracy", title = "Elastic Net Best Model Accuracy") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "bottom")
+
+
+```
+
+
+
+The model labeled `enet_tune_03` has an accuracy of 0.8213385	, which means it correctly predicts the outcome of the classification task about 82.13% of the time. This accuracy rate is the highest among all the models you've created, indicating that `enet_tune_03` is the most effective in predicting the outcome compared to the other models.
+
+**Neural network**
+
+1. Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+
+```{r  nnet_default1}
+set.seed(1234)
+
+nnet_default_01 <- train(outcome ~ Lightness + Saturation + (R + G + B + Hue + response)^2,
+                       data = df_caret,
+                       method = 'nnet',
+                       metric = my_metric,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl,
+                       trace = FALSE)
+
+nnet_default_01
+
+```
+
+
+2. Polynomial transformations for the continuous variables R, G, and B, as their distributions.
+
+```{r  nnet_default_02}
+set.seed(1234)
+
+nnet_default_02 <- train(outcome ~ poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue + Lightness + Saturation,
+                       data = df_caret,
+                       method = 'nnet',
+                       metric = my_metric,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl,
+                       trace = FALSE)
+
+nnet_default_02
+
+```
+
+3.All categorical and continuous variables
+
+```{r  nnet_default_03}
+
+set.seed(1234)
+
+nnet_default_03 <- train(outcome ~ Lightness + Saturation + R + G + B + Hue + response,
+                       data = df_caret,
+                       method = 'nnet',
+                       metric = my_metric,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl,
+                       trace = FALSE)
+
+nnet_default_03
+
+```
+
+```{r  nnet_grid}
+
+nnet_grid_01 <- expand.grid(size = c(5, 10, 20),
+                         decay = exp(seq(-6, 2, length.out=11)))
+
+
+nnet_grid_02 <- expand.grid(size = c(5, 10, 20),
+                         decay = exp(seq(-6, 2, length.out=11)))
+
+
+nnet_grid_03 <- expand.grid(size = c(5, 10, 20),
+                         decay = exp(seq(-6, 2, length.out=11)))
+
+
+
+```
+
+
+```{r  nnet_tune_01}
+
+set.seed(1234)
+
+nnet_tune_01 <- train( outcome ~ Lightness + Saturation + (R + G + B + Hue + response)^2,
+                    data = df_caret,
+                    method = 'nnet',
+                    metric = my_metric,
+                    tuneGrid = nnet_grid_01,
+                    preProcess = c("center", "scale"),
+                    trControl = my_ctrl,
+                    trace = FALSE)
+```
+
+```{r  nnet_tune_02}
+
+set.seed(1234)
+
+nnet_tune_02 <- train( outcome ~ poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue + Lightness + Saturation,
+                    data = df_caret,
+                    method = 'nnet',
+                    metric = my_metric,
+                    tuneGrid = nnet_grid_02,
+                    preProcess = c("center", "scale"),
+                    trControl = my_ctrl,
+                    trace = FALSE)
+```
+
+
+```{r  nnet_tune_03}
+
+set.seed(1234)
+
+nnet_tune_03 <- train(outcome ~ Lightness + Saturation + R + G + B + Hue + response,
+                    data = df_caret,
+                    method = 'nnet',
+                    metric = my_metric,
+                    tuneGrid = nnet_grid_03,
+                    preProcess = c("center", "scale"),
+                    trControl = my_ctrl,
+                    trace = FALSE)
+
+```
+
+
+**Best Performing Model - Accuracy**
+
+```{r  nn_best}
+
+accuracy_model1nn <- mean(nnet_tune_01$results$Accuracy)
+accuracy_model2nn <- mean(nnet_tune_02$results$Accuracy)
+accuracy_model3nn <- mean(nnet_tune_03$results$Accuracy)
+
+
+
+model_accuracies_nn <- tibble(
+  Model = c("nnet_tune_01", "nnet_tune_02", "nnet_tune_03"),
+  Accuracy = c(accuracy_model1nn, accuracy_model2nn, accuracy_model3nn)
+)
+
+
+model_accuracies_nn <- model_accuracies_nn %>% 
+  arrange(desc(Accuracy))
+
+print(model_accuracies_nn)
+
+```
+
+```{r  results_model_plotnn}
+
+ggplot(model_accuracies_nn, aes(x = reorder(Model, -Accuracy), y = Accuracy, group = 1)) +
+  geom_line(color = "skyblue", size = 1) +  
+  geom_point(color = "skyblue", size = 3) + 
+  labs(x = "Model", y = "Accuracy", title = "Neural Network Best Model Accuracy") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "bottom")
+
+```
+
+
+The model labeled `nnet_tune_01` has an accuracy of 0.8244646	, which means it correctly predicts the outcome of the classification task about 82.44% of the time. This accuracy rate is the highest among all the models you've created, indicating that `nnet_tune_01` is the most effective in predicting the outcome compared to the other models.
+
+
+**Random forest**
+
+1. Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+
+```{r  rf_default_01 }
+
+set.seed(1234)
+
+
+rf_default_01 <- train(outcome ~ Lightness + Saturation + (R + G + B + Hue + response)^2,
+                     data = df_caret,
+                     method = 'rf',
+                     metric = my_metric,
+                     trControl = my_ctrl,
+                     importance = TRUE)
+
+rf_default_01
+
+```
+2. Polynomial transformations for the continuous variables R, G, and B, as their distributions.
+
+```{r  rf_default_02}
+
+set.seed(1234)
+
+
+rf_default_02 <- train( outcome ~ poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue + Lightness + Saturation,
+                     data = df_caret,
+                     method = 'rf',
+                     metric = my_metric,
+                     trControl = my_ctrl,
+                     importance = TRUE)
+
+rf_default_02
+
+
+```
+
+
+3. Interaction of the categorical inputs with all continuous inputs main effects
+
+```{r  rf_default_03}
+
+set.seed(1234)
+
+
+rf_default_03 <- train(outcome ~ Lightness * (R + G + B + Hue + response) + Saturation * (R + G + B + Hue + response),
+                     data = df_caret,
+                     method = 'rf',
+                     metric = my_metric,
+                     trControl = my_ctrl,
+                     importance = TRUE)
+
+rf_default_03
+
+```
+
+```{r  rf_default_01_plot}
+plot( varImp(rf_default_01) )
+
+```
+
+```{r  rf_default_02_plot}
+plot( varImp(rf_default_02) )
+
+```
+
+```{r  rf_default_03_plot}
+plot( varImp(rf_default_03) )
+
+```
+
+
+**Best Performing Model - Accuracy**
+
+```{r  rf_default_best}
+
+accuracy_model1rf <- mean(rf_default_01$results$Accuracy)
+accuracy_model2rf <- mean(rf_default_02$results$Accuracy)
+accuracy_model3rf <- mean(rf_default_03$results$Accuracy)
+
+
+
+model_accuracies_rf <- tibble(
+  Model = c("rf_default_01", "rf_default_02", "rf_default_03"),
+  Accuracy = c(accuracy_model1rf, accuracy_model2rf, accuracy_model3rf)
+)
+
+
+model_accuracies_rf <- model_accuracies_rf %>% 
+  arrange(desc(Accuracy))
+
+print(model_accuracies_rf)
+
+```
+
+```{r  rf_default_bestplot}
+
+ggplot(model_accuracies_rf, aes(x = reorder(Model, -Accuracy), y = Accuracy, group = 1)) +
+  geom_line(color = "pink", size = 1) +  
+  geom_point(color = "pink", size = 3) + 
+  labs(x = "Model", y = "Accuracy", title = "Random Forest Best Model Accuracy") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "bottom")
+
+```
+
+
+
+The model labeled `rf_default_01` has an accuracy of 0.8476351		, which means it correctly predicts the outcome of the classification task about 84.76% of the time. This accuracy rate is the highest among all the models you've created, indicating that `rf_default_01` is the most effective in predicting the outcome compared to the other models.
+
+
+
+
+**Gradient boosted tree**
+
+1. Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+
+```{r  gbm_default_01 }
+
+set.seed(1234)
+
+gbt_default_01 <- train(outcome ~ (Lightness + Saturation + R + G + B + Hue + response)^2,
+                     data = df_caret,
+                     method = 'gbm',
+                     metric = my_metric,
+                     trControl = my_ctrl,
+                     preProcess = c("center", "scale"),
+                     verbose = FALSE)
+
+gbt_default_01
+```
+2. Polynomial transformations for the continuous variables R, G, and B, as their distributions.
+
+```{r  gbm_default_02}
+
+set.seed(1234)
+
+
+gbt_default_02 <- train( outcome ~ poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue + Lightness + Saturation,
+                     data = df_caret,
+                     method = 'gbm',
+                     metric = my_metric,
+                     trControl = my_ctrl,
+                     preProcess = c("center", "scale"),
+                     verbose = FALSE)
+
+gbt_default_02
+
+
+```
+
+
+3. Interaction of the categorical inputs with all continuous inputs main effects
+
+```{r  gbm_default_03}
+
+set.seed(1234)
+
+
+gbt_default_03 <- train(outcome ~ Lightness * (R + G + B + Hue + response) + Saturation * (R + G + B + Hue + response),
+                     data = df_caret,
+                     method = 'gbm',
+                     metric = my_metric,
+                     trControl = my_ctrl,
+                     preProcess = c("center", "scale"),
+                     verbose = FALSE)
+
+gbt_default_03
+
+```
+
+**Best Performing Model - Accuracy**
+
+```{r  gbm_best}
+accuracy_model1gbt <- mean(gbt_default_01$results$Accuracy)
+accuracy_model2gbt <- mean(gbt_default_02$results$Accuracy)
+accuracy_model3gbt <- mean(gbt_default_03$results$Accuracy)
+
+
+
+model_accuracies_gbt <- tibble(
+  Model = c("gbt_default_01", "gbt_default_02", "gbt_default_03"),
+  Accuracy = c(accuracy_model1gbt, accuracy_model2gbt, accuracy_model3gbt)
+)
+
+
+model_accuracies_gbt <- model_accuracies_gbt %>% 
+  arrange(desc(Accuracy))
+
+print(model_accuracies_gbt)
+
+
+
+
+```
+
+```{r  gbm_bestplot}
+ggplot(model_accuracies_gbt, aes(x = reorder(Model, -Accuracy), y = Accuracy, group = 1)) +
+  geom_line(color = "#d98cb3", size = 1) +  
+  geom_point(color = "#d98cb3", size = 3) + 
+  labs(x = "Model", y = "Accuracy", title = "Gradient boosted tree Best Model Accuracy") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "bottom")
+
+```
+
+
+
+The model labeled `gbt_default_03` has an accuracy of 0.8411240	, which means it correctly predicts the outcome of the classification task about 84.11% of the time. This accuracy rate is the highest among all the models you've created, indicating that `gbt_default_03` is the most effective in predicting the outcome compared to the other models.
+
+
+**Support Vector Machine (SVM)**
+
+1. Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+
+```{r  svm_default_01 }
+
+library(kernlab)
+set.seed(1234)
+
+svm_default_01 <- train(outcome ~ (Lightness + Saturation + R + G + B + Hue + response)^2,
+                     data = df_caret,
+                     method = 'svmRadial',
+                     metric = my_metric,
+                     trControl = my_ctrl,
+                     importance = TRUE)
+
+svm_default_01
+```
+
+2. Polynomial transformations for the continuous variables R, G, and B, as their distributions.
+
+```{r  svm_default_02}
+
+set.seed(1234)
+
+
+svm_default_02 <- train( outcome ~ poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue + Lightness + Saturation,
+                     data = df_caret,
+                     method = 'svmRadial',
+                     metric = my_metric,
+                     trControl = my_ctrl,
+                     importance = TRUE)
+
+svm_default_02
+
+
+```
+
+
+3. Interaction of the categorical inputs with all continuous inputs main effects
+
+```{r  svm_default_03}
+
+set.seed(1234)
+
+
+svm_default_03 <- train(outcome ~ Lightness * (R + G + B + Hue + response) + Saturation * (R + G + B + Hue + response),
+                     data = df_caret,
+                     method = 'svmRadial',
+                     metric = my_metric,
+                     trControl = my_ctrl,
+                     importance = TRUE)
+
+svm_default_03
+
+```
+
+**Best Performing Model - Accuracy**
+
+```{r  svm_best }
+accuracy_model1svm <- mean(svm_default_01$results$Accuracy)
+accuracy_model2svm <- mean(svm_default_02$results$Accuracy)
+accuracy_model3svm <- mean(svm_default_03$results$Accuracy)
+
+
+
+model_accuracies_svm <- tibble(
+  Model = c("svm_default_01", "svm_default_02", "svm_default_03"),
+  Accuracy = c(accuracy_model1svm, accuracy_model2svm, accuracy_model3svm)
+)
+
+
+model_accuracies_svm <- model_accuracies_svm %>% 
+  arrange(desc(Accuracy))
+
+print(model_accuracies_svm)
+
+```
+
+```{r  svm_bestplot }
+ggplot(model_accuracies_svm, aes(x = reorder(Model, -Accuracy), y = Accuracy, group = 1)) +
+  geom_line(color = "#ffd699", size = 1) +  
+  geom_point(color = "#ffd699", size = 3) + 
+  labs(x = "Model", y = "Accuracy", title = "Support Vector Machine Best Model Accuracy") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "bottom")
+
+```
+
+The model labeled `svm_default_03` has an accuracy of 0.8221465	, which means it correctly predicts the outcome of the classification task about 82.21% of the time. This accuracy rate is the highest among all the models you've created, indicating that `svm_default_03` is the most effective in predicting the outcome compared to the other models.
+
+**k-Nearest Neighbors (k-NN)**
+
+1. Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+
+```{r  knn_default_01 }
+
+set.seed(1234)
+
+knn_default_01 <- train(outcome ~ (Lightness + Saturation + R + G + B + Hue + response)^2,
+                     data = df_caret,
+                     method = 'knn',
+                     metric = my_metric,
+                     trControl = my_ctrl,
+                     preProcess = c("center", "scale"))
+
+knn_default_01
+```
+
+2. Polynomial transformations for the continuous variables R, G, and B, as their distributions.
+
+```{r  knn_default_02}
+
+set.seed(1234)
+
+knn_default_02 <- train( outcome ~ poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue + Lightness + Saturation,
+                     data = df_caret,
+                     method = 'knn',
+                     metric = my_metric,
+                     trControl = my_ctrl,
+                     preProcess = c("center", "scale"))
+
+knn_default_02
+```
+
+
+3. Interaction of the categorical inputs with all continuous inputs main effects
+
+```{r  knn_default_03}
+
+set.seed(1234)
+
+knn_default_03 <- train( outcome ~ Lightness * (R + G + B + Hue + response) + Saturation * (R + G + B + Hue + response),
+                     data = df_caret,
+                     method = 'knn',
+                     metric = my_metric,
+                     trControl = my_ctrl,
+                     preProcess = c("center", "scale"))
+
+knn_default_03
+
+```
+
+
+**Best Performing Model - Accuracy**
+
+
+```{r  knn_best }
+accuracy_model1knn <- mean(knn_default_01$results$Accuracy)
+accuracy_model2knn <- mean(knn_default_02$results$Accuracy)
+accuracy_model3knn <- mean(knn_default_03$results$Accuracy)
+
+
+
+model_accuracies_knn <- tibble(
+  Model = c("knn_default_01", "knn_default_02", "knn_default_03"),
+  Accuracy = c(accuracy_model1knn, accuracy_model2knn, accuracy_model3knn)
+)
+
+
+model_accuracies_knn <- model_accuracies_knn %>% 
+  arrange(desc(Accuracy))
+
+print(model_accuracies_knn)
+
+```
+
+```{r  knn_bestplot }
+ggplot(model_accuracies_knn, aes(x = reorder(Model, -Accuracy), y = Accuracy, group = 1)) +
+  geom_line(color = "#ff9999", size = 1) +  
+  geom_point(color = "#ff9999", size = 3) + 
+  labs(x = "Model", y = "Accuracy", title = "KNN Best Model Accuracy") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "bottom")
+
+```
+
+
+The model labeled `knn_default_03` has an accuracy of 0.8080314		, which means it correctly predicts the outcome of the classification task about 80.80% of the time. This accuracy rate is the highest among all the models you've created, indicating that `knn_default_03` is the most effective in predicting the outcome compared to the other models.
+
+
+

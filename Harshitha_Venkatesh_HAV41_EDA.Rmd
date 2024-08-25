@@ -1,0 +1,596 @@
+---
+title: "Exploratory Data Analysis -EDA"
+output: html_document
+date: "2024-04-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+Exploratory Data Analysis (EDA) is an essential process in understanding the characteristics of the data and uncovering insights that can guide further analysis and modeling. In the context of paint properties, EDA allows us to explore the relationships between color attributes (R, G, B values, Lightness, Saturation, Hue) and the response variable (popularity of the paint)
+
+## Load Packages
+
+The tidyverse is loaded in for you in the code chunk below. The visualization package, ggplot2, and the data manipulation package, dplyr, are part of the “larger” tidyverse.
+
+```{r load_packages}
+library(tidyverse)
+```
+The modelr package is loaded in for you in the code chunk below. You may use functions from modelr to calculate performance metrics for your models.
+
+```{r load_packages1}
+library(modelr)
+```
+
+The caret package to manage all aspects of data splitting, training, and evaluating the models.
+
+```{r load_packages2}
+library(caret)
+```
+
+## Import Data
+
+Importing data is a foundational step in data analysis and predictive modeling tasks. In R, the `readr` package offers a straightforward method for reading CSV files into data frames. For this task, we aim to import both training and holdout datasets stored in CSV format. The approach involves defining file paths for the datasets and using the `read_csv` function to read the files into data frames. We set `col_names = TRUE` to automatically detect column names from the first row of each CSV file. The training data is stored in a data frame named `df_train`, while the holdout data is stored in `df_holdout`. By executing this code, the datasets are ready for further analysis, feature engineering, and modeling tasks.
+
+```{r read_train_data}
+# Importing training data
+train_data_path <- 'paint_project_train_data.csv'
+df_train <- readr::read_csv(train_data_path, col_names = TRUE)
+```
+
+```{r glimpse}
+df_train %>% glimpse()
+```
+In the above dataset, the variables can be classified as categorical or continuous based on their nature:
+
+
+## Visualize the Distributions of Variables
+
+**Counts for Categorical Variables**
+
+**Lightness Distribution**
+
+The Bar plot  visualizes the distribution of the Lightness variable in the training data. We first identify the unique categories (levels) present in the Lightness variable and define a color palette with seven distinct colors. We then map each unique category to a color from the palette, ensuring that each category is represented by a unique color in the plot. Finally, we create the plot using ggplot() and display it with the specified color mapping, providing a clear and informative visualization of the distribution of Lightness in the training dataset.
+
+
+```{r Lightness}
+# Get unique categories in Lightness
+unique_lightness <- unique(df_train$Lightness)
+
+# Define colors for each unique category
+color_palette <- c("brown", "darkblue", "lightpink", "#CC99FF", "lightyellow", "maroon", "lavender")
+
+# Create a named vector with colors for each unique category
+color_values <- setNames(color_palette[1:length(unique_lightness)], unique_lightness)
+
+plot_lightness <- ggplot(df_train, aes(x = Lightness, fill = Lightness)) + 
+  geom_bar() + 
+  labs(title = "Distribution of Lightness",
+       x = "Lightness", y = "Count") +
+  scale_fill_manual(values = color_values)
+
+plot_lightness
+
+```
+
+
+**Saturation Distribution**
+
+The Bar plot visualizes the distribution of the Saturation variable in the training data. It begins by identifying the unique categories (levels) present in the Saturation variable and defines a color palette with seven distinct colors. Each unique category is then mapped to a color from the palette, ensuring that every category is represented by a unique color in the plot. The plot is created using ggplot() with Saturation on the x-axis and the count of each category on the y-axis. The plot is displayed with the specified color mapping, offering a clear and informative visualization of the distribution of Saturation in the training dataset.
+
+```{r Saturation}
+# Get unique categories in Saturation
+unique_saturation <- unique(df_train$Saturation)
+
+# Define colors for each unique category
+color_palette_saturation <- c(bright = "#007FFF",gray = "#6C757D",muted = "#7F7F7F",neutral = "#BFBFBF",pure = "#0000FF",shaded = "#0047AB",subdued = "#6E7B8B")
+
+# Create a named vector with colors for each unique category
+color_values_saturation <- setNames(color_palette_saturation[1:length(unique_saturation)], unique_saturation)
+
+plot_saturation <- ggplot(df_train, aes(x = Saturation, fill = Saturation)) + 
+  geom_bar() + 
+  labs(title = "Distribution of Saturation",
+       x = "Saturation", y = "Count") +
+  scale_fill_manual(values = color_values_saturation)
+
+plot_saturation
+
+```
+
+
+**Outcome Distribution**
+
+```{r Outcome}
+plot_outcome <- ggplot(df_train, aes(x = outcome)) +
+  geom_bar(color = "black", fill = "lightgreen") +
+  labs(title = "Distribution of Outcome",
+       x = "Outcome", y = "Count") +
+  theme_minimal()
+plot_outcome
+```
+
+
+
+**Continuous variables**
+
+**Hue Distribution**
+
+The histogram displays the distribution of the Hue variable in the training data. It sets the histogram bars to be filled with a uniform color and customizes the appearance of the plot, including the title and axis labels.
+
+```{r Hue}
+plot_hue <- ggplot(df_train, aes(x = Hue)) +
+  geom_histogram(color = "black", binwidth = 1, fill = "yellow",bins= 100) +
+  labs(title = "Distribution of Hue",
+       x = "Hue", y = "Count") +
+  theme_minimal()
+plot_hue
+```
+
+
+This distribution does not appear to be Gaussian or normally distributed. It seems to be more uniform, with counts fairly even across the range of Hue values, although there are some variations with certain values having slightly higher or lower counts. In a Gaussian distribution, we would expect to see a bell-shaped curve with most of the data clustering around the mean and symmetric tails on either side. This histogram does not show that pattern.
+
+
+
+**Response Distribution**
+
+```{r Response}
+plot_response <- ggplot(df_train, aes(x = response)) +
+  geom_density(color = "black") +
+  labs(title = "Distribution of Response",
+       x = "Response", y = "Count") +
+  theme_minimal()
+plot_response
+```
+
+
+The density plot provided for the variable 'Response' shows a distribution with two peaks, which suggests a bimodal distribution. This is not characteristic of a Gaussian or normal distribution, which typically has a single, central peak (unimodal) and is symmetric. The presence of two peaks here indicates two modes of data, which could imply the existence of two underlying groups or processes within your 'Response' variable.
+
+
+
+
+**RGB Distribution**
+
+```{r R_distribution}
+ggplot(df_train, aes(x = R)) + 
+  geom_density(color = "red", alpha = 1) +
+  ggtitle("Density plot of R") +
+  xlab("R") +
+  ylab("Density")
+```
+```{r G_distribution}
+ggplot(df_train, aes(x = G)) + 
+  geom_density(color = "green", alpha = 1) +
+  ggtitle("Density plot of G") +
+  xlab("G") +
+  ylab("Density")
+```
+```{r B_distribution}
+ggplot(df_train, aes(x = B)) + 
+  geom_density(color = "blue", alpha = 1) +
+  ggtitle("Density plot of B") +
+  xlab("B") +
+  ylab("Density")
+```
+
+
+These distributions is not typical of a Gaussian or normal distribution, which would have a symmetric bell-shaped curve. Instead, these density plot suggests the distributions are skewed, which is a common occurrence in real-world data. 
+
+## Group Continuous Variables Based on Categorical Variables
+
+This analysis includes summarizing the dataset to understand the distribution and central tendencies of color components and response variables. Boxplots are utilized to visualize the relationships between color components and outcomes, both overall and within specific categories. T-tests are performed to assess the significance of differences in color components between outcome groups, providing insights into potential associations between color properties and outcomes.
+
+
+The df_train_summary table provides summary statistics (mean, standard deviation, and median) for the variables R, G, B, and  Hue grouped by Lightness and Saturation.
+
+```{r Summary}
+df_train_summary <- df_train %>%
+  group_by(Lightness, Saturation,outcome) %>%
+  summarise(across(c(R, G, B, Hue,response), list(mean = mean, sd = sd, median = median)), .groups = 'drop')
+df_train_summary
+```
+
+```{r AnovaR}
+anova_R <- aov(R_mean ~ Lightness + Saturation+ outcome, data = df_train_summary)
+summary(anova_R)
+```
+
+```{r AnovaG}
+anova_G <- aov(G_mean ~ Lightness + Saturation+ outcome, data = df_train_summary)
+summary(anova_G)
+```
+
+```{r AnovaB}
+anova_B <- aov(B_mean ~ Lightness + Saturation + outcome, data = df_train_summary)
+summary(anova_B)
+```
+
+```{r AnovaH}
+anova_Hue <- aov(Hue_mean ~ Lightness + Saturation+ outcome, data = df_train_summary)
+summary(anova_Hue)
+```
+```{r AnovaRes}
+anova_Response <- aov(Hue_mean ~ Lightness + Saturation+ outcome, data = df_train_summary)
+summary(anova_Response)
+```
+
+
+The ANOVA results demonstrate that 'Lightness' has a significant impact on the continuous variables in the dataset, with p-values less than 0.05 across all tests, suggesting strong differences in the distributions and summary statistics based on 'Lightness'. 'Saturation' also shows significance, indicating its influence, though to a lesser extent than 'Lightness'. 'Outcome' has a varied effect; it is significant for some variables, indicating that the binary outcome can influence the distribution and summary statistics of certain continuous variables.
+
+These boxplots are created for the variables R, G, B and Hue by Lightness and Saturation. These boxplots visualize the distribution of each color component (R, G, B, Hue) across different levels of Lightness and Saturation.
+
+**R distribution**
+
+```{r Boxplots RL }
+ggplot(df_train_summary, aes(x = Lightness, y = R_mean, fill = Lightness)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of R mean for each Lightness category", y = "R mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+```{r Boxplots RS }
+ggplot(df_train_summary, aes(x = Saturation, y = R_mean, fill = Saturation)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of R mean for each Saturation category", y = "R mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+```{r Boxplots RO }
+df_train_summary$outcome <- factor(df_train_summary$outcome)
+
+ggplot(df_train_summary, aes(x = outcome, y = R_mean, fill = outcome)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of R mean for each outcome", x = "Outcome", y = "R Mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+**G distribution**
+
+```{r Boxplots GL }
+ggplot(df_train_summary, aes(x = Lightness, y = G_mean, fill = Lightness)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of G mean for each Lightness category", y = "G mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+
+
+```{r Boxplots GS }
+ggplot(df_train_summary, aes(x = Saturation, y = G_mean, fill = Saturation)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of G mean for each Saturation category", y = "G mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+```{r Boxplots GO }
+df_train_summary$outcome <- factor(df_train_summary$outcome)
+
+ggplot(df_train_summary, aes(x = outcome, y = G_mean, fill = outcome)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of G mean for each outcome", x = "Outcome", y = "G Mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+**B distribution**
+
+```{r Boxplots BL }
+ggplot(df_train_summary, aes(x = Lightness, y = B_mean, fill = Lightness)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of B mean for each Lightness category", y = "B mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+
+
+```{r Boxplots BS }
+ggplot(df_train_summary, aes(x = Saturation, y = B_mean, fill = Saturation)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of B mean for each Saturation category", y = "B mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+```{r Boxplots BO }
+df_train_summary$outcome <- factor(df_train_summary$outcome)
+
+ggplot(df_train_summary, aes(x = outcome, y = B_mean, fill = outcome)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of B mean for each outcome", x = "Outcome", y = "B Mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+**Hue distribution**
+
+```{r Boxplots HueL }
+ggplot(df_train_summary, aes(x = Lightness, y = Hue_mean, fill = Lightness)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of Hue mean for each Lightness category", y = "Hue mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+```{r Boxplots HueS }
+ggplot(df_train_summary, aes(x = Saturation, y = Hue_mean, fill = Saturation)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of Hue mean for each Saturation category", y = "Hue mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+```{r Boxplots HO }
+df_train_summary$outcome <- factor(df_train_summary$outcome)
+
+ggplot(df_train_summary, aes(x = outcome, y = Hue_mean, fill = outcome)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of Hue mean for each outcome", x = "Outcome", y = "Hue mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+**Response distribution**
+
+```{r Boxplots ResponseL }
+ggplot(df_train_summary, aes(x = Lightness, y = response_mean, fill = Lightness)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of Response mean for each Lightness category", y = "Response mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+```{r Boxplots ResponseS }
+ggplot(df_train_summary, aes(x = Saturation, y = response_mean, fill = Saturation)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of Response mean for each Saturation category", y = "Response mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+```{r Boxplots ResOut }
+
+df_train_summary$outcome <- factor(df_train_summary$outcome)
+
+ggplot(df_train_summary, aes(x = outcome, y = response_mean, fill = outcome)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of Response mean for each outcome", x = "Outcome", y = "response_mean") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+
+
+
+```{r TtestR}
+t_test_R <- t.test(R ~ outcome, data = df_train)
+print(t_test_R)
+```
+
+```{r TtestG}
+t_test_G <- t.test(G ~ outcome, data = df_train)
+print(t_test_G)
+```
+
+```{r TtestB}
+t_test_B <- t.test(B ~ outcome, data = df_train)
+print(t_test_B)
+```
+
+```{r TtestHue}
+t_test_Hue <- t.test(Hue ~ outcome, data = df_train)
+print(t_test_Hue)
+```
+
+```{r testHue}
+t_test_Response <- t.test(response ~ outcome, data = df_train)
+print(t_test_Response)
+```
+
+
+The Welch Two Sample t-tests for 'R', 'G', and 'response' indicate significant differences in their mean values between the two binary outcome groups (p-values: 0.0004164, 0.02672, and 0.03736, respectively), suggesting that the distributions and summary statistics of these variables are influenced by the binary outcome. However, for 'B' and 'Hue', the p-values (0.7959 and 0.6272, respectively) do not indicate significant differences in mean values between the groups, implying that the binary outcome does not have the same level of impact on the distributions of these variables.
+
+
+## Visualize the Relationships Between the Continuous Inputs
+
+```{r ContinuousInputMatrix}
+cor_matrix <- cor(df_train[, c("R", "G", "B", "Hue","response")])
+cor_matrix
+```
+
+```{r HeatMap}
+
+heatmap(cor_matrix, symm = TRUE, main = "Correlation Heatmap of Continuous Inputs")
+```
+
+
+## Visualize the relationships between the continuous outputs (response and the LOGIT-transformed response, y) with respect to the continuous INPUTS.
+
+
+**R vs Response and Logit-Transform**
+
+```{r LogitTransform1}
+logit <- function(p) {
+  log(p / (1 - p))
+}
+
+df_train$logit_response <- logit((df_train$response - 0) / (100 - 0))
+```
+
+**R vs Response and Logit-Transform**
+
+```{r PlotRR}
+ggplot(df_train, aes(x = R, y = response)) +
+  geom_point(color="pink") +
+  geom_smooth(method = "lm",formula = y ~ x, col = "black") +
+  labs(title = "Scatter plot of R vs. Response", x = "R", y = "Response") +
+  theme_minimal()
+```
+
+
+```{r PlotRLT}
+ggplot(df_train, aes(x = R, y = logit_response)) +
+  geom_point(color="red") +
+  geom_smooth(method = "lm",formula = y ~ x, col = "black") +
+  labs(title = "Scatter plot of R vs. Logit-Transformed Response", x = "R", y = "Logit-Transformed Response") +
+  theme_minimal()
+```
+
+
+Both scatter plots of 'R' versus 'Response' and 'R' versus 'Logit-Transformed Response' show a strong positive linear relationship, indicating that higher values of 'R' are associated with higher responses, both before and after the logit transformation. The trend is clear and consistent in these visuals, but without differentiation by categorical inputs, it’s not possible to determine from these plots alone if the trend varies by categories like 'Lightness' or 'Saturation'. For that, a further breakdown by categorical input values would be necessary.
+
+**B vs Response and Logit-Transform**
+
+
+```{r PlotBR}
+ggplot(df_train, aes(x = B, y = response)) +
+  geom_point(color="skyblue") +
+  geom_smooth(method = "lm",formula = y ~ x, col = "black") +
+  labs(title = "Scatter plot of B vs. Response", x = "B", y = "Response") +
+  theme_minimal()
+```
+
+
+
+```{r PlotBLT}
+ggplot(df_train, aes(x = B, y = logit_response)) +
+  geom_point(color="blue") +
+  geom_smooth(method = "lm",formula = y ~ x, col = "black") +
+  labs(title = "Scatter plot of B vs. Logit-Transformed Response", x = "B", y = "Logit-Transformed Response") +
+  theme_minimal()
+```
+
+
+The scatter plots for 'B' versus 'Response' and 'B' versus 'Logit-Transformed Response' both display a positive linear trend, indicating that as 'B' increases, so does both the response and its logit transformation. This relationship appears consistent and does not visibly depend on the categorical inputs within these plots.
+
+**G vs Response and Logit-Transform**
+
+```{r PlotGR}
+ggplot(df_train, aes(x = G, y = response)) +
+  geom_point(color="lightgreen") +
+  geom_smooth(method = "lm",formula = y ~ x, col = "black") +
+  labs(title = "Scatter plot of G vs. Response", x = "G", y = "Response") +
+  theme_minimal()
+```
+
+```{r PlotGLT2}
+ggplot(df_train, aes(x = G, y = logit_response)) +
+  geom_point(color="green") +
+  geom_smooth(method = "lm",formula = y ~ x, col = "black") +
+  labs(title = "Scatter plot of G vs. Logit-Transformed Response", x = "G", y = "Logit-Transformed Response") +
+  theme_minimal()
+```
+
+The scatter plots suggest a clear positive trend between 'G' and both 'Response' and 'Logit-Transformed Response'. Points cluster around an ascending line, indicating that as 'G' increases, so does the 'Response' and its logit transformation. This trend seems to hold regardless of the categorical inputs, as they are not differentiated in the plots. 
+
+**Hue vs Response and Logit-Transform**
+
+```{r PlotHueR}
+ggplot(df_train, aes(x = Hue, y = response)) +
+  geom_point(color="purple") +
+  geom_smooth(method = "lm",formula = y ~ x, col = "black") +
+  labs(title = "Scatter plot of Hue vs. Response", x = "Hue", y = "Response") +
+  theme_minimal()
+```
+```{r PlotGLT1}
+ggplot(df_train, aes(x = Hue, y = logit_response)) +
+  geom_point(color="violet") +
+  geom_smooth(method = "lm",formula = y ~ x, col = "black") +
+  labs(title = "Scatter plot of Hue vs. Logit-Transformed Response", x = "Hue", y = "Logit-Transformed Response") +
+  theme_minimal()
+```
+
+
+From the scatter plots, there is no immediately clear linear trend or correlation visible between 'Hue' and the 'Response' or the 'Logit-Transformed Response'. The points are widely spread out, indicating high variance and low correlation. While the regression line is included, it appears to be horizontal or nearly so in both cases, which suggests no strong linear relationship. It is not possible to determine from these plots alone whether the trends depend on the categorical inputs; for that, we would need to visualize interactions or conduct a more in-depth statistical analysis that incorporates the categorical variables.
+
+## Visualize the behavior of the binary outcome with respect to the Categorical inputs
+
+```{r CatILightness}
+ggplot(df_train, aes(x = Lightness, fill = as.factor(outcome))) +
+  geom_bar(position = "fill") +
+  labs(title = "Binary Outcome by Categorical Input Lightness", x = "Lightness", y = "Proportion") +
+  theme_minimal()
+```
+```{r CatISaturation}
+ggplot(df_train, aes(x = Saturation, fill = as.factor(outcome))) +
+  geom_bar(position = "fill") +
+  labs(title = "Binary Outcome by Categorical Input Saturation", x = "Saturation", y = "Proportion") +
+  theme_minimal()
+```
+
+
+
+
+
+
+## Visualize the behavior of the binary outcome with respect to the Continuous inputs
+
+
+```{r CIR}
+ggplot(df_train, aes(x = R, y = outcome)) +
+  geom_jitter(color="maroon") +  
+  geom_smooth(method = "glm", formula = y ~ x,method.args = list(family = "binomial"), se = FALSE,color="black") +
+  labs(title = "Binary Outcome by Continuous Input R", x = "R", y = "Probability of Outcome") +
+  theme_minimal()
+
+```
+
+```{r CIB}
+ggplot(df_train, aes(x = B, y = outcome)) +
+  geom_jitter(color="navy") +  
+  geom_smooth(method = "glm", formula = y ~ x,method.args = list(family = "binomial"), se = FALSE,color="black") +
+  labs(title = "Binary Outcome by Continuous Input B", x = "B", y = "Probability of Outcome") +
+  theme_minimal()
+
+```
+```{r CIG}
+ggplot(df_train, aes(x = G, y = outcome)) +
+  geom_jitter(color="darkgreen") +  
+  geom_smooth(method = "glm", formula = y ~ x,method.args = list(family = "binomial"), se = FALSE,color="black") +
+  labs(title = "Binary Outcome by Continuous Input G", x = "G", y = "Probability of Outcome") +
+  theme_minimal()
+
+```
+
+```{r BO Categorical}
+library(ggplot2)
+
+ggplot(df_train, aes(x = Lightness, fill = as.factor(outcome))) +
+  geom_bar(position = position_dodge(width = 0.7)) +  
+  labs(title = "Bar Plots of Lightness and Saturation, Grouped by Outcome",
+       x = "Category", y = "Count") +
+  facet_wrap(~Saturation, scales = "free_y") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),  
+        plot.title = element_text(hjust = 0.5), 
+        legend.position = "bottom")
+  
+
+
+
+
+```
+
+
+
+A thorough exploration of the dataset has been completed. Categorical variables were analyzed using counts to understand their distribution. For continuous variables, histograms or density plots were created to visualize their shapes and assess if they resembled a normal (Gaussian) distribution. Additionally, continuous variables were grouped based on both categorical variables and the binary outcome variable. This allowed for comparisons of distributions and summary statistics (like mean and median) across different groups. The relationships between continuous input variables were explored through correlation analysis. Visualizations were also created to depict the relationships between continuous outputs (response and logit-transformed response) with respect to the continuous inputs. These visualizations helped identify trends and potential dependencies on categorical inputs. Finally, methods for visualizing the behavior of the binary outcome variable with respect to both continuous and categorical inputs were explored. This comprehensive exploration provides a deeper understanding of the data, including potential patterns, relationships between variables, and potential biases. This knowledge can be used for further analysis, such as model building or hypothesis testing.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

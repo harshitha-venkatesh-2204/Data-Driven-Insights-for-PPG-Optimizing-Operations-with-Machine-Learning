@@ -1,0 +1,75 @@
+---
+title: "Holdout"
+output: html_document
+date: "2024-04-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Packages
+
+The tidyverse is loaded in for you in the code chunk below. The visualization package, ggplot2, and the data manipulation package, dplyr, are part of the “larger” tidyverse.
+
+```{r load_packages}
+library(tidyverse)
+```
+The modelr package is loaded in for you in the code chunk below. You may use functions from modelr to calculate performance metrics for your models.
+
+```{r load_packages1}
+library(modelr)
+```
+
+The caret package to manage all aspects of data splitting, training, and evaluating the models.
+
+```{r load_packages2}
+library(caret)
+```
+
+## Import Data
+
+```{r read_data}
+# Importing training data
+train_data_path <- 'paint_project_train_data.csv'
+df_train<- readr::read_csv(train_data_path, col_names = TRUE)
+```
+
+```{r read_holdout_data}
+# Importing training data
+holdout_data_path <- 'paint_project_holdout_data.csv'
+df_holdout<- readr::read_csv(holdout_data_path, col_names = TRUE)
+```
+
+```{r glimpse}
+df_holdout %>% glimpse()
+```
+```{r LogitTransform}
+logit <- function(p) {
+  log(p / (1 - p))
+}
+
+df_train$logit_response <- logit((df_train$response - 0) / (100 - 0))
+```
+
+## Holdout Test Set Requirements
+
+
+
+```{r holdout}
+
+fit_lm <- lm(logit_response ~ R + G + B + Hue + Lightness + Saturation, data = df_train)
+fit_glm <- glm(outcome ~ Lightness + Saturation + R + G + B + Hue , family = binomial, data = df_train)
+df_holdout$y <- predict(fit_lm, newdata = df_holdout, type = "response")
+df_holdout$probability <- predict(fit_glm, newdata = df_holdout, type = "response")
+df_holdout$outcome <- ifelse(df_holdout$probability > 0.5, "event", "non_event")
+df_predictions <- df_holdout %>%
+  rowid_to_column("id") %>%
+  select(id, y, outcome, probability)
+write_csv(df_predictions, "C:/Users/harsh/OneDrive/Desktop/Spring 2024/Machine Learning/Harshitha_Venkatesh_Project_HAV41/predictions.csv")
+
+
+
+
+```
+

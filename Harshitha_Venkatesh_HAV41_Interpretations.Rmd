@@ -1,0 +1,707 @@
+---
+title: "Interpretations"
+output: html_document
+date: "2024-04-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Packages
+
+The tidyverse is loaded in for you in the code chunk below. The visualization package, ggplot2, and the data manipulation package, dplyr, are part of the “larger” tidyverse.
+
+```{r load_packages}
+library(tidyverse)
+```
+The modelr package is loaded in for you in the code chunk below. You may use functions from modelr to calculate performance metrics for your models.
+
+```{r load_packages1}
+library(modelr)
+```
+
+The caret package to manage all aspects of data splitting, training, and evaluating the models.
+
+```{r load_packages2}
+library(caret)
+```
+
+## Import Data
+
+```{r read_train_data}
+# Importing training data
+train_data_path <- 'paint_project_train_data.csv'
+df_train<- readr::read_csv(train_data_path, col_names = TRUE)
+```
+```{r read_holdout_data}
+# Importing training data
+holdout_data_path <- 'paint_project_holdout_data.csv'
+df_holdout<- readr::read_csv(holdout_data_path, col_names = TRUE)
+```
+
+```{r glimpse}
+df_train %>% glimpse()
+```
+
+## Part iv: Interpretation – ivA) Input Importance.
+
+**Best Regression Model**
+
+```{r LogitTransform}
+logit <- function(p) {
+  log(p / (1 - p))
+}
+
+df_train$logit_response <- logit((df_train$response - 0) / (100 - 0))
+```
+
+1. Interaction terms between the polynomial-transformed continuous variables and the categorical variables
+
+```{r mod1R}
+fit_lm9 <- lm(logit_response ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue) * (Lightness + Saturation), data = df_train)
+```
+
+**Best Classification Model**
+
+1.Interaction terms between the polynomial-transformed continuous variables themselves
+
+```{r mod1C}
+mod10 <-  glm(outcome ~ poly(R, 2) * poly(G, 2) + poly(R, 2) * poly(B, 2) + poly(R, 2) * poly(Hue, 2) + poly(G, 2) * poly(B, 2) + poly(G, 2) * poly(Hue, 2) + poly(B, 2) * poly(Hue, 2), family = binomial, data = df_train)
+```
+**Important variables associated with your best performing models**
+
+```{r mod1RSummary}
+summary_fit_lm9 <- summary(fit_lm9)
+print(summary_fit_lm9)
+```
+
+```{r mod1RImp}
+important_vars_lm9 <- summary_fit_lm9$coefficients[order(abs(summary_fit_lm9$coefficients[, "Estimate"]), decreasing = TRUE), ]
+print(important_vars_lm9)
+```
+```{r mod1RPlot}
+important_vars_lm9_df <- as.data.frame(important_vars_lm9)
+important_vars_lm9_df$Variable <- rownames(important_vars_lm9_df)
+
+ggplot(important_vars_lm9_df, aes(x = reorder(Variable, Estimate), y = Estimate)) +
+  geom_bar(stat = "identity", fill = "orange") +
+  coord_flip() +  
+  theme_minimal() +
+  labs(title = "Important Variables in Linear Regression Model (fit_lm9)",
+       x = "Variable",
+       y = "Coefficient Estimate")
+
+```
+
+```{r mod10Summary}
+summary_mod10 <- summary(mod10)
+print(summary_mod10)
+```
+
+
+```{r mod10ImpVar}
+important_vars_mod10 <- summary_mod10$coefficients[order(abs(summary_mod10$coefficients[, "Estimate"]), decreasing = TRUE), ]
+print(important_vars_mod10)
+```
+```{r mod1Cplot}
+important_vars_mod10_df <- as.data.frame(important_vars_mod10)
+important_vars_mod10_df$Variable <- rownames(important_vars_mod10_df)
+
+ggplot(important_vars_mod10_df, aes(x = reorder(Variable, Estimate), y = Estimate)) +
+  geom_bar(stat = "identity", fill = "purple") +
+  coord_flip() +  
+  theme_minimal() +
+  labs(title = "Important Variables in Logistic Regression Model (mod10)",
+       x = "Variable",
+       y = "Coefficient Estimate")
+```
+
+**Most important variables similar for the regression and classification tasks**
+
+```{r ImpVarRC}
+color_model_inputs <- c("R", "G", "B", "Hue", "Saturation", "Lightness")
+
+
+important_vars_lm9_df <- as.data.frame(important_vars_lm9)
+important_vars_lm9_df$Variable <- rownames(important_vars_lm9_df)
+
+
+dominant_input_names_lm9 <- unique(grep(paste(color_model_inputs, collapse = "|"), important_vars_lm9_df$Variable, value = TRUE))
+dominant_input_names_mod10 <- unique(grep(paste(color_model_inputs, collapse = "|"), important_vars_mod10_df$Variable, value = TRUE))
+
+cat("Dominant color model inputs in linear regression model (fit_lm9):\n")
+print(dominant_input_names_lm9)
+cat("\nDominant color model inputs in logistic regression model (mod10):\n")
+print(dominant_input_names_mod10)
+
+
+non_helpful_input_names_lm9 <- setdiff(color_model_inputs, unique(grep(paste(color_model_inputs, collapse = "|"), rownames(important_vars_lm9_df), value = TRUE)))
+non_helpful_input_names_mod10 <- setdiff(color_model_inputs, unique(grep(paste(color_model_inputs, collapse = "|"), rownames(important_vars_mod10_df), value = TRUE)))
+
+cat("\nNon-helpful color model inputs in linear regression model (fit_lm9):\n")
+print(non_helpful_input_names_lm9)
+cat("\nNon-helpful color model inputs in logistic regression model (mod10):\n")
+print(non_helpful_input_names_mod10)
+
+```
+
+
+
+
+## Part iv: Interpretation – ivB) Input insights
+
+
+```{r HoldoutOutcome}
+
+df_holdout$predicted_outcome_mod10 <- predict(mod10, newdata = df_holdout, type = "response")
+head(df_holdout)
+
+```
+
+```{r HoldoutTibble}
+library(dplyr)
+
+
+df_holdout <- df_holdout %>%
+  mutate(prediction_category = case_when(
+    predicted_outcome_mod10 > 0.66  ~ "High",
+    predicted_outcome_mod10 > 0.33  ~ "Medium",
+    TRUE                             ~ "Low"
+  ))
+
+
+prediction_distribution <- df_holdout %>%
+  group_by(Lightness, Saturation) %>%
+  count(prediction_category) %>%
+  ungroup() %>%
+  arrange(Lightness, Saturation, prediction_category)
+
+
+print(prediction_distribution)
+
+
+```
+**Easiest to predict in the classification tasks**
+
+```{r EasyCL}
+
+df_holdout <- df_holdout %>%
+  mutate(prediction_confidence = abs(predicted_outcome_mod10 - 0.5))
+
+
+average_confidence <- df_holdout %>%
+  group_by(Lightness, Saturation) %>%
+  summarise(average_confidence = mean(prediction_confidence), .groups = "drop") %>%
+  ungroup()
+
+
+easiest_combination <- average_confidence[which.max(average_confidence$average_confidence), ]
+easiest_combination
+
+
+```
+**Hardest to predict classification tasks**
+
+
+```{r HardCL}
+
+df_holdout <- df_holdout %>%
+  mutate(prediction_confidence = abs(predicted_outcome_mod10 - 0.5))
+
+
+average_confidence <- df_holdout %>%
+  group_by(Lightness, Saturation) %>%
+  summarise(average_confidence = mean(prediction_confidence), .groups = "drop") %>%
+  ungroup()
+
+
+hardest_combination <- average_confidence[which.min(average_confidence$average_confidence), ]
+hardest_combination
+
+
+
+```
+**Easiest to predict in the regression tasks**
+
+```{r holdoutRE}
+
+df_holdout$predicted_outcome_lm9 <- predict(fit_lm9, newdata = df_holdout)
+head(df_holdout)
+
+```
+
+```{r holdoutRSumm}
+
+df_holdout <- df_holdout %>%
+  mutate(prediction_category = case_when(
+    predicted_outcome_lm9 > 0.66  ~ "High",
+    predicted_outcome_lm9 > 0.33  ~ "Medium",
+    TRUE                             ~ "Low"
+  ))
+
+prediction_distribution <- df_holdout %>%
+  group_by(Lightness, Saturation) %>%
+  count(prediction_category) %>%
+  ungroup() %>%
+  arrange(Lightness, Saturation, prediction_category)
+
+print(prediction_distribution)
+
+
+
+
+```
+
+```{r holdoutREasy}
+
+df_holdout <- df_holdout %>%
+  mutate(regression_confidence = abs(predicted_outcome_lm9))
+
+average_confidence <- df_holdout %>%
+  group_by(Lightness, Saturation) %>%
+  summarise(
+    average_regression_confidence = mean(regression_confidence),
+    .groups = "drop"
+  ) %>%
+  ungroup()
+
+
+easiest_regression_combination <- average_confidence[which.max(average_confidence$average_regression_confidence), ]
+easiest_regression_combination
+
+```
+
+
+```{r HoldoutHardR}
+
+df_holdout <- df_holdout %>%
+  mutate(regression_confidence = abs(predicted_outcome_lm9))
+
+average_confidence <- df_holdout %>%
+  group_by(Lightness, Saturation) %>%
+  summarise(
+    average_regression_confidence = mean(regression_confidence),
+    .groups = "drop"
+  ) %>%
+  ungroup()
+
+hardest_regression_combination <- average_confidence[which.min(average_confidence$average_regression_confidence), ]
+
+hardest_regression_combination
+```
+
+
+
+## Part iv: Interpretation – ivC) Prediction insights
+
+
+**Regression hardest and easiest trend with two important inputs**
+
+```{r HoldoutHardRPlot}
+library(ggplot2)
+library(dplyr)
+
+
+important_inputs <- c("R", "G")
+
+hardest_data <- df_holdout %>%
+  filter(Lightness == hardest_regression_combination$Lightness, 
+         Saturation == hardest_regression_combination$Saturation)
+
+easiest_data <- df_holdout %>%
+  filter(Lightness == easiest_regression_combination$Lightness, 
+         Saturation == easiest_regression_combination$Saturation)
+
+
+create_trend_plot <- function(data, input_name, title_suffix) {
+  ggplot(data, aes_string(x = input_name, y = "predicted_outcome_lm9")) +
+    geom_point(alpha = 0.7) +
+    geom_smooth(method = "loess",formula = y ~ x) +
+    labs(title = paste("Trend for", title_suffix, "Combination"),
+         x = input_name,
+         y = "Predicted Outcome") +
+    theme_minimal()
+}
+
+plots_hardest <- lapply(important_inputs, function(input) {
+  create_trend_plot(hardest_data, input, "Hardest")
+})
+
+
+plots_easiest <- lapply(important_inputs, function(input) {
+  create_trend_plot(easiest_data, input, "Easiest")
+})
+
+
+library(gridExtra)
+grid.arrange(grobs = c(plots_hardest, plots_easiest), ncol = 2)
+
+
+
+```
+
+**Classification hardest and easiest trend with two important inputs**
+
+```{r HoldoutHardCPlot}
+library(ggplot2)
+library(dplyr)
+
+
+important_inputs <- c("R", "G")
+
+hardest_data <- df_holdout %>%
+  filter(Lightness == hardest_combination$Lightness, 
+         Saturation == hardest_combination$Saturation)
+
+easiest_data <- df_holdout %>%
+  filter(Lightness == easiest_combination$Lightness, 
+         Saturation == easiest_combination$Saturation)
+
+
+create_trend_plot <- function(data, input_name, title_suffix) {
+  ggplot(data, aes_string(x = input_name, y = "predicted_outcome_mod10")) +
+    geom_point(alpha = 0.7) +
+    geom_smooth(method = "loess",  formula = y ~ x) +
+    labs(title = paste("Trend for", title_suffix, "Combination"),
+         x = input_name,
+         y = "Predicted Outcome") +
+    theme_minimal()
+}
+
+plots_hardest <- lapply(important_inputs, function(input) {
+  create_trend_plot(hardest_data, input, "Hardest")
+})
+
+
+plots_easiest <- lapply(important_inputs, function(input) {
+  create_trend_plot(easiest_data, input, "Easiest")
+})
+
+
+library(gridExtra)
+grid.arrange(grobs = c(plots_hardest, plots_easiest), ncol = 2)
+
+
+
+```
+
+
+
+**Visualize your predictive trends as a surface plot - Regression**
+
+```{r surfaceplotfnR}
+
+Model9 <- lm(logit_response ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue) * (Lightness + Saturation), data = df_train)
+
+unique_lightness <- unique(df_train$Lightness,2)
+unique_saturation <- unique(df_train$Saturation,2)
+
+viz_grid <- expand.grid(
+  R = seq(min(df_train$R), max(df_train$R), length.out = 101),
+  G = seq(min(df_train$G), max(df_train$G), length.out = 101),
+  B = seq(min(df_train$B), max(df_train$B), length.out = 2),
+  Hue = seq(min(df_train$Hue), max(df_train$Hue), length.out = 2),
+  Lightness = unique_lightness,
+  Saturation = unique_saturation
+)
+
+tidy_predict <- function(mod, xnew)
+{
+  pred_df <- predict(mod, xnew, interval = "confidence") %>% 
+    as.data.frame() %>% tibble::as_tibble() %>% 
+    dplyr::select(pred = fit, ci_lwr = lwr, ci_upr = upr) %>% 
+    bind_cols(predict(mod, xnew, interval = 'prediction') %>% 
+                as.data.frame() %>% tibble::as_tibble() %>% 
+                dplyr::select(pred_lwr = lwr, pred_upr = upr))
+  
+  xnew %>% bind_cols(pred_df)
+}
+
+pred_Model9 <- tidy_predict(Model9, viz_grid)
+
+```
+
+```{r surfacePlotRegression}
+library(viridis)
+
+ggplot(pred_Model9, aes(x = Lightness, y = Saturation, fill = pred)) +
+  geom_raster() +
+  scale_fill_viridis_c(option = "viridis", limits = range(pred_Model9$pred, na.rm = TRUE)) +
+  labs(x = "Lightness", y = "Saturation", fill = "Predicted Logit Response") +
+  theme_minimal()
+
+```
+
+**Visualize your predictive trends as a surface plot - Classification**
+
+```{r surfaceplotfnC}
+viz_grid <- expand.grid(R = seq(min(df_train$R), max(df_train$R), length.out = 101),
+                        G = seq(min(df_train$G), max(df_train$G), length.out = 101),
+                        B = unique(df_train$B),
+                        Lightness = unique(df_train$Lightness),
+                        KEEP.OUT.ATTRS = FALSE,
+                        stringsAsFactors = FALSE) %>% 
+  as.data.frame() %>% tibble::as_tibble()
+
+viz_grid %>% glimpse()
+
+generate_glm_post_samples <- function(mvn_result, num_samples)
+{
+  # specify the number of unknown beta parameters
+  length_beta <- length(mvn_result$mode)
+  
+  # generate the random samples
+  beta_samples <- MASS::mvrnorm(n = num_samples,
+                                mu = mvn_result$mode,
+                                Sigma = mvn_result$var_matrix)
+  
+  # change the data type and name
+  beta_samples %>% 
+    as.data.frame() %>% tibble::as_tibble() %>% 
+    purrr::set_names(sprintf("beta_%02d", (1:length_beta) - 1))
+}
+
+post_logistic_pred_samples <- function(Xnew, Bmat)
+{
+  # calculate the linear predictor at all prediction points and posterior samples
+  eta_mat <- Xnew %*% t(Bmat)
+  
+  # calculate the event probability
+  mu_mat <- boot::inv.logit(eta_mat)
+  
+  # book keeping
+  list(eta_mat = eta_mat, mu_mat = mu_mat)
+}
+
+summarize_logistic_pred_from_laplace <- function(mvn_result, Xtest, num_samples)
+{
+  # generate posterior samples of the beta parameters
+  betas <- generate_glm_post_samples(mvn_result, num_samples)
+  
+  # data type conversion
+  betas <- as.matrix(betas)
+  
+  # make posterior predictions on the test set
+  pred_test <- post_logistic_pred_samples(Xtest, betas)
+  
+  # calculate summary statistics on the posterior predicted probability
+  # summarize over the posterior samples
+  
+  # posterior mean, should you summarize along rows (rowMeans) or 
+  # summarize down columns (colMeans) ???
+  mu_avg <- rowMeans(pred_test$mu_mat)
+  
+  # posterior quantiles
+  mu_q05 <- apply(pred_test$mu_mat, 1, stats::quantile, probs = 0.05)
+  mu_q95 <- apply(pred_test$mu_mat, 1, stats::quantile, probs = 0.95)
+  
+  # book keeping
+  tibble::tibble(
+    mu_avg = mu_avg,
+    mu_q05 = mu_q05,
+    mu_q95 = mu_q95
+  ) %>% 
+    tibble::rowid_to_column("pred_id")
+}
+
+my_laplace <- function(start_guess, logpost_func, ...)
+{
+  # code adapted from the `LearnBayes`` function `laplace()`
+  fit <- optim(start_guess,
+               logpost_func,
+               gr = NULL,
+               ...,
+               method = "BFGS",
+               hessian = TRUE,
+               control = list(fnscale = -1, maxit = 5001))
+  
+  mode <- fit$par
+  post_var_matrix <- -solve(fit$hessian)
+  p <- length(mode)
+  int <- p/2 * log(2 * pi) + 0.5 * log(det(post_var_matrix)) + logpost_func(mode, ...)
+  # package all of the results into a list
+  list(mode = mode,
+       var_matrix = post_var_matrix,
+       log_evidence = int,
+       converge = ifelse(fit$convergence == 0,
+                         "YES", 
+                         "NO"),
+       iter_counts = as.numeric(fit$counts[1]))
+}
+
+logistic_logpost <- function(unknowns, my_info)
+{
+  # extract the design matrix and assign to X
+  X <- my_info$design_matrix
+  
+  # calculate the linear predictor
+  eta <- as.vector( X %*% as.matrix(unknowns))
+  
+  # calculate the event probability
+  mu <- boot::inv.logit(eta)
+  
+  # evaluate the log-likelihood
+  log_lik <- sum(dbinom(x = my_info$yobs,
+                        size = 1, 
+                        prob = mu,
+                        log = TRUE))
+  
+  # evaluate the log-prior
+  log_prior <- sum(dnorm(x = unknowns,
+                         mean = my_info$mu_beta,
+                         sd = my_info$tau_beta,
+                         log = TRUE))
+  
+  # sum together
+  log_lik + log_prior
+}
+
+
+
+mod10 <-  glm(outcome ~ poly(R, 2) * poly(G, 2) + poly(R, 2) * poly(B, 2) + poly(R, 2) * poly(Hue, 2) + poly(G, 2) * poly(B, 2) + poly(G, 2) * poly(Hue, 2) + poly(B, 2) * poly(Hue, 2), family = binomial, data = df_train)
+mod10
+
+Xmat_10 <- model.matrix( mod10$formula, data = df_train)
+
+info_10 <- list(
+  yobs = df_train$outcome,
+  design_matrix = Xmat_10,
+  mu_beta = 0,
+  tau_beta = 4.5
+)
+
+laplace_10 <- my_laplace(rep(0, ncol(Xmat_10)), logistic_logpost, info_10)
+
+Xviz_10 <- model.matrix( mod10$formula, data = df_train)
+
+
+post_pred_summary_10 <- summarize_logistic_pred_from_laplace(laplace_10, Xviz_10, 2500)
+```
+
+
+```{r surfaceCplotClassification}
+
+post_pred_summary_10 <- post_pred_summary_10 %>%
+  mutate(pred_id = row_number()) %>%
+  left_join(df_train %>% select(Lightness, Saturation) %>% mutate(pred_id = row_number()), by = "pred_id") %>%
+  select(-pred_id)  
+ggplot(post_pred_summary_10, aes(x = Lightness, y = Saturation, fill = mu_avg)) +
+  geom_raster() +
+  scale_fill_viridis_c(option = "viridis", limits = c(0, 1)) +
+  labs(x = "Lightness", y = "Saturation", fill = "Event Probability") +
+  theme_minimal()
+
+```
+
+
+**Surface plot for the hardest to predict Lightness and Saturation combinations and again for the easiest to predict Lightness and Saturation combinations - Regression**
+
+```{r surfacePlot1}
+
+reference_values <- df_holdout %>%
+  summarise(across(c(R, G, B, Hue), median, na.rm = TRUE))
+
+prediction_grid <- expand.grid(R = seq(min(df_holdout$R), max(df_holdout$R), length.out = 101),
+                        G = seq(min(df_holdout$G), max(df_holdout$G), length.out = 101),
+                        B = unique(df_holdout$B),
+                        Lightness = unique(df_holdout$Lightness),
+                        KEEP.OUT.ATTRS = FALSE,
+                        stringsAsFactors = FALSE) %>% 
+  as.data.frame() %>% tibble::as_tibble()
+
+
+create_surface_plot <- function(data_subset, title_suffix) {
+  ggplot(data_subset, aes(x = Lightness, y = Saturation, fill = pred)) +
+    geom_raster(interpolate = TRUE) +
+    scale_fill_viridis_c() +
+    labs(title = paste("Surface Plot for", title_suffix, "Combination"),
+         x = "Lightness", y = "Saturation", fill = "Predicted Outcome") +
+    theme_minimal()
+}
+
+
+hardest_subset <- pred_Model9 %>%
+  filter(Lightness == hardest_regression_combination$Lightness, 
+         Saturation == hardest_regression_combination$Saturation)
+
+easiest_subset <- pred_Model9 %>%
+  filter(Lightness == easiest_regression_combination$Lightness, 
+         Saturation == easiest_regression_combination$Saturation)
+
+
+hardest_surface_plot <- create_surface_plot(hardest_subset, "Hardest")
+easiest_surface_plot <- create_surface_plot(easiest_subset, "Easiest")
+
+print(hardest_surface_plot)
+
+```
+
+```{r surfaceEasy}
+print(easiest_surface_plot)
+```
+**Surface plot for the hardest to predict Lightness and Saturation combinations and again for the easiest to predict Lightness and Saturation combinations - Classification**
+
+```{r surfacePlotrefc}
+reference_values <- df_holdout %>%
+  summarise(across(c(R, G, B, Hue), median, na.rm = TRUE))
+
+prediction_grid <- expand.grid(R = seq(min(df_holdout$R), max(df_holdout$R), length.out = 101),
+                        G = seq(min(df_holdout$G), max(df_holdout$G), length.out = 101),
+                        B = unique(df_holdout$B),
+                        Lightness = unique(df_holdout$Lightness),
+                        KEEP.OUT.ATTRS = FALSE,
+                        stringsAsFactors = FALSE) %>% 
+  as.data.frame() %>% tibble::as_tibble()
+
+
+create_surface_plot <- function(data_subset, title_suffix) {
+  ggplot(data_subset, aes(x = Lightness, y = Saturation, fill = mu_avg)) +
+    geom_raster(interpolate = TRUE) +
+    scale_fill_viridis_c() +
+    labs(title = paste("Surface Plot for", title_suffix, "Combination"),
+         x = "Lightness", y = "Saturation", fill = "Predicted Outcome") +
+    theme_minimal()
+}
+
+
+hardest_subset <- post_pred_summary_10 %>%
+  filter(Lightness == hardest_combination$Lightness, 
+         Saturation == hardest_combination$Saturation)
+
+easiest_subset <- post_pred_summary_10 %>%
+  filter(Lightness == easiest_combination$Lightness, 
+         Saturation == easiest_combination$Saturation)
+
+
+hardest_surface_plot <- create_surface_plot(hardest_subset, "Hardest")
+easiest_surface_plot <- create_surface_plot(easiest_subset, "Easiest")
+
+print(hardest_surface_plot)
+
+
+```
+
+
+```{r surfaceRPlot1e}
+print(easiest_surface_plot)
+```
+## Part iv: Interpretation – ivC) Prediction insights
+
+
+
+The first surface plot - Predictive trends Regression shows the probability of an event across varying levels of saturation and lightness for the best-performing classification model. It presents a mix of colors, which indicates a variation in the event probability across different combinations of saturation and lightness. The model seems to output different probabilities for the event occurrence, which suggests a nuanced understanding of the relationship between these inputs and the event probability.
+
+The second surface plot - Predictive trends Classification  displays the predicted logit response from the best-performing regression model. This plot appears uniformly colored, indicating that the predicted logit response does not vary significantly across the different levels of saturation and lightness. This could imply that the regression model may not be as sensitive to changes in these inputs as the classification model, or it could suggest that the influence of these two factors on the predicted response is relatively constant across their ranges.
+
+From these plots, we can conclude that the classification model differentiates more between the combinations of saturation and lightness in terms of event probability, while the regression model yields a more consistent prediction across these inputs. The uniformity in the regression plot could also indicate that other variables, not depicted here, might have a more significant impact on the model’s predictions.
+
+**Regression - Easiest and Hardest Combination**
+
+The trends in the surface plots for the hardest and easiest to predict combinations using the regression models do indeed show differences. In the hardest to predict combination, there is a visible color gradient, which indicates a variance in the predicted outcomes across different values of saturation and lightness. This suggests the model's predictions vary more significantly with changes in these inputs, reflecting a more complex relationship where the model is less certain.Conversely, the easiest to predict combination shows a uniform color across the entire plot, indicating that the predicted outcome is consistent regardless of changes in saturation and lightness. This uniformity suggests that for these combinations of saturation and lightness, the model predicts outcomes with greater certainty and less variability.The regression model shows a higher prediction confidence and lower variability in outcomes for the easiest combinations, while for the hardest combinations, the predictions are more nuanced and sensitive to changes in input variables.
+
+
+
+**Classification - Easiest and Hardest Combination**
+
+The surface plots for the hardest and easiest combinations reveal a striking uniformity in color, indicating a lack of variation in predicted outcomes across different levels of Lightness and Saturation. This uniformity suggests that the model fails to capture any significant interaction or relationship between these inputs and the predicted outcome within the plotted ranges. Despite this overall similarity, there are notable differences between the two plots. The scale of the predicted outcome differs, with the hardest combination plot ranging from approximately 0.175 to 0.275, while the easiest combination plot ranges from approximately 0.10 to 0.30. Additionally, the color coding differs, possibly due to the different ranges of predicted outcomes in each plot, with the hardest combination shown in shades of green and the easiest combination in shades of purple. The lack of gradient in both plots implies that the model may not be sensitive to changes in Lightness and Saturation within these ranges, suggesting either a lack of influence of these inputs on the model's predictions or a potential performance issue for these particular combinations.

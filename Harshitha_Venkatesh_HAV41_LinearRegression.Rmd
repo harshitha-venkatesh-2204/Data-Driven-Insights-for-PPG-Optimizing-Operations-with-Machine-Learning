@@ -1,0 +1,1224 @@
+---
+title: "Linear Regression ii"
+output: html_document
+date: "2024-04-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Packages
+
+The tidyverse is loaded in for you in the code chunk below. The visualization package, ggplot2, and the data manipulation package, dplyr, are part of the “larger” tidyverse.
+
+```{r load_packages}
+library(tidyverse)
+```
+The modelr package is loaded in for you in the code chunk below. You may use functions from modelr to calculate performance metrics for your models.
+
+```{r load_packages1}
+library(modelr)
+```
+
+The caret package to manage all aspects of data splitting, training, and evaluating the models.
+
+```{r load_packages2}
+library(caret)
+```
+
+## Import Data
+
+
+```{r read_train_data}
+# Importing training data
+train_data_path <- 'paint_project_train_data.csv'
+df_train <- readr::read_csv(train_data_path, col_names = TRUE)
+```
+A glimpse of the data are provided for you below. 
+
+```{r glimpse}
+df_train %>% glimpse()
+```
+
+## Part ii: Linear Regression
+## Part iia: Linear Regression - Linear models
+
+**Logit Transform**
+
+```{r LogitTransform}
+logit <- function(p) {
+  log(p / (1 - p))
+}
+
+df_train$logit_response <- logit((df_train$response - 0) / (100 - 0))
+```
+
+
+**Builds linear models to understand the logit-transformed response variable's relationship with df_train.**
+
+1. Intercept-only model: No input variables
+
+```{r mod1}
+fit_lm1 <- lm(logit_response ~ 1, data = df_train)
+```
+
+2. Categorical variables only – linear additive
+
+```{r mod2}
+fit_lm2 <- lm(logit_response ~ Lightness + Saturation, data = df_train)
+```
+
+3. Continuous variables only – linear additive
+
+```{r mod3}
+fit_lm3 <- lm(logit_response ~ R + G + B + Hue, data = df_train)
+```
+
+4. All categorical and continuous variables – linear additive
+
+```{r mod4}
+fit_lm4 <- lm(logit_response ~ R + G + B + Hue + Lightness + Saturation, data = df_train)
+```
+
+5. Interaction of the categorical inputs with all continuous inputs main effects
+
+```{r mod5}
+fit_lm5 <- lm(logit_response ~ (R + G + B + Hue) * (Lightness + Saturation), data = df_train)
+```
+
+6. Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+
+```{r mod6}
+fit_lm6 <- lm(logit_response ~ (R + G + B + Hue)^2 + Lightness + Saturation, data = df_train)
+```
+
+7. Interaction of the categorical inputs with all main effect and all pairwise interactions of continuous inputs
+
+```{r mod7}
+fit_lm7 <- lm(logit_response ~ (R + G + B + Hue)^2 * (Lightness + Saturation), data = df_train)
+```
+
+8. Polynomial transformations for the continuous variables R, G, and B, as their distributions.
+
+```{r mod8}
+fit_lm8 <- lm(logit_response ~ poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue + Lightness + Saturation, data = df_train)
+```
+
+9.Interaction terms between the polynomial-transformed continuous variables and the categorical variables
+
+```{r mod9}
+fit_lm9 <- lm(logit_response ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue) * (Lightness + Saturation), data = df_train)
+```
+
+10.Interaction terms between the polynomial-transformed continuous variables themselves
+
+```{r mod10}
+fit_lm10 <- lm(logit_response ~ poly(R, 2) * poly(G, 2) + poly(R, 2) * poly(B, 2) + poly(R, 2) * poly(Hue, 2) + poly(G, 2) * poly(B, 2) + poly(G, 2) * poly(Hue, 2) + poly(B, 2) * poly(Hue, 2), 
+              data = df_train)
+```
+
+**RMSE for each model**
+
+```{r RMSE}
+results_fit_lf <- tibble::tibble(
+  fit_lm = 1:10,
+  RMSE = c(modelr::rmse(fit_lm1, df_train),
+           modelr::rmse(fit_lm2, df_train),
+           modelr::rmse(fit_lm3, df_train),
+           modelr::rmse(fit_lm4, df_train),
+           modelr::rmse(fit_lm5, df_train),
+           modelr::rmse(fit_lm6, df_train),
+           modelr::rmse(fit_lm7, df_train),
+           modelr::rmse(fit_lm8, df_train),
+           modelr::rmse(fit_lm9, df_train),
+           modelr::rmse(fit_lm10, df_train))
+)
+results_fit_lf
+```
+
+```{r RMSEArrange}
+results_fit_lf %>% 
+  arrange(RMSE)
+```
+
+
+```{r RMSEPlot}
+purrr::map2_dfr(list(fit_lm1, fit_lm2, fit_lm3,
+                     fit_lm4, fit_lm5, fit_lm6,
+                     fit_lm7, fit_lm8, fit_lm9,fit_lm10),
+                1:10,
+                function(m, p, data_use){
+                  list(fit_lm = p,
+                       RMSE = modelr::rmse(m, data_use))
+                },
+                data_use = df_train) %>% 
+  ggplot(mapping = aes(x = fit_lm, y = RMSE)) +
+  geom_line(size = 1.2, color = "navy") +
+  geom_point(size = 4, color = "yellow") +
+  scale_x_continuous(breaks = 1:10) +
+  theme_bw() +
+  labs(title = "RMSE Values for Different Models",
+       x = "Model Number",
+       y = "RMSE") +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+**R Squared for each model**
+
+```{r RSquared}
+tibble::tibble(
+  lm_1 = modelr::rsquare(fit_lm1, df_train),
+  lm_2 = modelr::rsquare(fit_lm2, df_train),
+  lm_3 = modelr::rsquare(fit_lm3, df_train),
+  lm_4 = modelr::rsquare(fit_lm4, df_train),
+  lm_5 = modelr::rsquare(fit_lm5, df_train),
+  lm_6 = modelr::rsquare(fit_lm6, df_train),
+  lm_7 = modelr::rsquare(fit_lm7, df_train),
+  lm_8 = modelr::rsquare(fit_lm8, df_train),
+  lm_9 = modelr::rsquare(fit_lm9, df_train),
+  lm_10 = modelr::rsquare(fit_lm10, df_train)
+)
+```
+
+```{r RSquaredArrange3}
+results_fit_lf %>% 
+  mutate(R_squared = c(modelr::rsquare(fit_lm1, df_train),
+                       modelr::rsquare(fit_lm2, df_train),
+                       modelr::rsquare(fit_lm3, df_train),
+                       modelr::rsquare(fit_lm4, df_train),
+                       modelr::rsquare(fit_lm5, df_train),
+                       modelr::rsquare(fit_lm6, df_train),
+                       modelr::rsquare(fit_lm7, df_train),
+                       modelr::rsquare(fit_lm8, df_train),
+                       modelr::rsquare(fit_lm9, df_train),
+                       modelr::rsquare(fit_lm10, df_train))) %>% 
+  arrange(desc(R_squared))
+```
+
+```{r RSquaredArrange1}
+results_fit_lf %>% 
+  mutate(R_squared = c(modelr::rsquare(fit_lm1, df_train),
+                       modelr::rsquare(fit_lm2, df_train),
+                       modelr::rsquare(fit_lm3, df_train),
+                       modelr::rsquare(fit_lm4, df_train),
+                       modelr::rsquare(fit_lm5, df_train),
+                       modelr::rsquare(fit_lm6, df_train),
+                       modelr::rsquare(fit_lm7, df_train),
+                       modelr::rsquare(fit_lm8, df_train),
+                       modelr::rsquare(fit_lm9, df_train),
+                       modelr::rsquare(fit_lm10, df_train))) %>% 
+  ggplot(mapping = aes(x = fit_lm, y = R_squared)) +
+  geom_line(size = 1.2,color="navy") +
+  geom_point(size = 4,color="orange") +
+  scale_x_continuous(breaks = 1:10) +
+   labs(title = "RSquared Values for Different Models",
+       x = "Model Number",
+       y = "RSquared") +
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank())
+```
+
+The best model according to RMSE is the one with the smallest RMSE value. The best model according to R-squared is the highest R-squared value.For this application, the fit_lm9 has the lowest training set RMSE and the highest training set R-squared. Both performance metrics agree on the best model.
+
+**Coefficient summaries for your top 3 models**
+
+```{r Coef9}
+summary(fit_lm9)
+```
+```{r Coef7}
+summary(fit_lm7)
+```
+```{r Coef10}
+summary(fit_lm10)
+```
+The summaries of the top three models indicate they are all highly predictive, with Multiple R-squared values close to 1 (0.9989, 0.9988, 0.9988 for models 9, 7, and 10 respectively), which suggests that a very high proportion of the variance in the dependent variable is explained by each model. The Adjusted R-squared values, which account for the number of predictors used relative to the number of observations, are also very high and in close range (0.9988, 0.9986, 0.9987), indicating that the inclusion of additional predictors is indeed justified. Model 9 has the highest F-statistic, suggesting it may be the best model among the three in terms of overall fit, but all models have extremely low p-values, indicating statistical significance. The residual standard errors are very low for all models, though model 7 has the highest, which implies slightly less precise predictions. Important inputs would likely be those with the largest absolute coefficient values that are consistent across models and have narrow confidence intervals.
+
+```{r Coefplot9710}
+library(coefplot)
+
+
+multi_coef_plot <- coefplot::multiplot(fit_lm9, fit_lm7, fit_lm10, dodgeHeight = 0.9) +
+  theme_bw() + 
+  labs(title = "Coefficient Comparison of Top 3 Models", 
+       y = "Coefficient Estimate", x = "Predictors") +
+  theme(axis.text.y = element_text(angle = 40, hjust = 1, size = 8),
+        legend.position = "bottom", # Place legend at the bottom
+        plot.title = element_text(hjust = 0.5), # Center the plot title
+        axis.title.x = element_text(vjust = -0.5)) # Adjust x-axis title
+
+
+print(multi_coef_plot)
+
+
+
+```
+
+
+
+```{r Coefsignifi}
+check_significance <- function(model) {
+  # Extracting the summary
+  model_summary <- summary(model)
+  # Getting the coefficients
+  coefficients <- model_summary$coefficients
+  # Checking for significance (p-value < 0.05)
+  significant_terms <- rownames(coefficients)[coefficients[, "Pr(>|t|)"] < 0.05]
+  return(significant_terms)
+}
+
+
+significant_inputs_lm9 <- check_significance(fit_lm9)
+significant_inputs_lm7 <- check_significance(fit_lm7)
+significant_inputs_lm10 <- check_significance(fit_lm10)
+
+
+print(significant_inputs_lm9)
+
+ 
+```
+```{r Coefsignifi7}
+print(significant_inputs_lm7)
+```
+
+
+```{r Coefsignifi10}
+print(significant_inputs_lm10)
+```
+
+
+
+The important inputs appear to be the interactions between the polynomial terms of R, G, and B, interactions with Hue and different categories of lightness and saturation, and the categorical variables representing different levels of lightness and saturation. These inputs have p-values less than 0.05, indicating that they are statistically significant in predicting the response variable.
+
+
+
+## Part iib: Linear Regression– iiB) Bayesian Linear models
+
+**Logit Transform**
+
+```{r LogitTransform1}
+logit <- function(p) {
+  log(p / (1 - p))
+}
+
+df_train$logit_response <- logit((df_train$response - 0) / (100 - 0))
+```
+
+1.Interaction terms between the polynomial-transformed continuous variables and the categorical variables
+
+```{r Model1}
+
+##Best Model
+X01 <- model.matrix(logit_response ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue) * (Lightness + Saturation), data = df_train)
+
+info_01_weak <- list(
+  yobs = df_train$logit_response,
+  design_matrix = X01,
+  mu_beta = 0,
+  tau_beta = 50,
+  sigma_rate = 1
+)
+
+info_01_strong <- list(
+  yobs = df_train$logit_response,
+  design_matrix = X01,
+  mu_beta = 0,
+  tau_beta = 1,
+  sigma_rate = 1
+)
+
+info_01_very_strong <- list(
+  yobs = df_train$logit_response,
+  design_matrix = X01,
+  mu_beta = 0,
+  tau_beta = 1/50,
+  sigma_rate = 1
+)
+```
+
+2.All categorical and continuous variables – linear additive
+
+Choosing a model with all categorical and continuous variables and linear additive features simplifies the analysis by assuming a linear relationship between predictors and the log-odds of the response. This approach is interpretable, efficient for large datasets, and helps identify the impact of each variable on the outcome.
+
+```{r Model2}
+
+X02 <- model.matrix(logit_response ~ R + G + B + Hue + Lightness + Saturation, data = df_train)
+
+info_02_weak <- list(
+  yobs = df_train$logit_response,
+  design_matrix = X02,
+  mu_beta = 0,
+  tau_beta = 50,
+  sigma_rate = 1
+)
+
+info_02_strong <- list(
+  yobs = df_train$logit_response,
+  design_matrix = X02,
+  mu_beta = 0,
+  tau_beta = 1,
+  sigma_rate = 1
+)
+
+info_02_very_strong <- list(
+  yobs = df_train$logit_response,
+  design_matrix = X02,
+  mu_beta = 0,
+  tau_beta = 1/50,
+  sigma_rate = 1
+)
+```
+
+The log-posterior function to calculate the mean trend, mu, using matrix math between the design matrix and the unknown β column vector.
+
+```{r LogPosterior}
+
+lm_logpost <- function(unknowns, my_info)
+{
+  # specify the number of unknown beta parameters
+  length_beta <- ncol(my_info$design_matrix)
+  
+  # extract the beta parameters from the `unknowns` vector
+  beta_v <- unknowns[1:length_beta]
+  
+  # extract the unbounded noise parameter, varphi
+  lik_varphi <- unknowns[length_beta + 1]
+  
+  # back-transform from varphi to sigma
+  lik_sigma <- exp(lik_varphi)
+  
+  # extract design matrix
+  X <- my_info$design_matrix
+  
+  # calculate the linear predictor
+  mu <- as.vector( X %*% as.matrix(beta_v) )
+  
+  # evaluate the log-likelihood
+  log_lik <- sum(dnorm(x = my_info$yobs,
+                       mean = mu,
+                       sd = lik_sigma,
+                       log = TRUE))
+  
+  # evaluate the log-prior
+  log_prior_beta <- sum(dnorm(x = beta_v,
+                              mean = my_info$mu_beta,
+                              sd = my_info$tau_beta,
+                              log = TRUE))
+  
+  log_prior_sigma <- dexp(x = lik_sigma,
+                          rate = my_info$sigma_rate,
+                          log = TRUE)
+  
+  # add the mean trend prior and noise prior together
+  log_prior <- log_prior_beta + log_prior_sigma
+  
+  # account for the transformation
+  log_derive_adjust <- lik_varphi
+  
+  # sum together
+  log_lik + log_prior + log_derive_adjust
+}
+
+
+```
+
+my_laplace() function executes the laplace approximation and returns the object consisting of the posterior mode, posterior covariance matrix, and the log-evidence.
+
+```{r mylaplace}
+my_laplace <- function(start_guess, logpost_func, ...)
+{
+  # code adapted from the `LearnBayes`` function `laplace()`
+  fit <- optim(start_guess,
+               logpost_func,
+               gr = NULL,
+               ...,
+               method = "BFGS",
+               hessian = TRUE,
+               control = list(fnscale = -1, maxit = 1001))
+  
+  mode <- fit$par
+  post_var_matrix <- -solve(fit$hessian)
+  p <- length(mode)
+  int <- p/2 * log(2 * pi) + 0.5 * log(det(post_var_matrix)) + logpost_func(mode, ...)
+  # package all of the results into a list
+  list(mode = mode,
+       var_matrix = post_var_matrix,
+       log_evidence = int,
+       converge = ifelse(fit$convergence == 0,
+                         "YES", 
+                         "NO"),
+       iter_counts = as.numeric(fit$counts[1]))
+}
+```
+
+Execute the Laplace Approximation for the model 1 formulation and the model 2 formulation
+
+```{r ConvergeWeak}
+laplace_01_weak <- my_laplace(rep(0, ncol(X01)+1), lm_logpost, info_01_weak)
+laplace_02_weak <- my_laplace(rep(0, ncol(X02)+1), lm_logpost, info_02_weak)
+
+laplace_01_weak$converge
+laplace_02_weak$converge
+```
+
+```{r ConvergeStrong}
+laplace_01_strong <- my_laplace(rep(0, ncol(X01) + 1), lm_logpost, info_01_strong)
+laplace_02_strong <- my_laplace(rep(0, ncol(X02) + 1), lm_logpost, info_02_strong)
+
+convergence_results <- purrr::map(list(laplace_01_strong, laplace_02_strong), ~ .x$converge)
+convergence_results_char <- purrr::map_chr(convergence_results, as.character)
+
+convergence_results_char
+
+```
+
+
+```{r ConvergeVerySS}
+laplace_01_very_strong <- my_laplace(rep(0, ncol(X01) + 1), lm_logpost, info_01_very_strong)
+laplace_02_very_strong <- my_laplace(rep(0, ncol(X02) + 1), lm_logpost, info_02_very_strong)
+
+convergence_results <- purrr::map_chr(list(laplace_01_very_strong, laplace_02_very_strong), pluck, "converge")
+convergence_results
+
+```
+
+
+Use the Bayes Factor to identify the better of the models.
+
+```{r ConvergeBF}
+evidence_ratio <- exp(laplace_01_weak$log_evidence) / exp(laplace_02_weak$log_evidence)
+
+log_evidence_diff <- laplace_01_weak$log_evidence - laplace_02_weak$log_evidence
+evidence_exp_difference <- exp(log_evidence_diff)
+
+evidence_ratio
+evidence_exp_difference
+```
+
+```{r ConvergeVSBF}
+log_evidence_ratio_strong <- laplace_01_strong$log_evidence - laplace_02_strong$log_evidence
+log_evidence_ratio_very_strong <- laplace_01_very_strong$log_evidence - laplace_02_very_strong$log_evidence
+log_bayes_factor <- laplace_01_strong$log_evidence - laplace_02_very_strong$log_evidence
+
+
+evidence_ratio_strong <- exp(log_evidence_ratio_strong)
+evidence_ratio_very_strong <- exp(log_evidence_ratio_very_strong)
+bayes_factor <- exp(log_bayes_factor)
+
+evidence_ratio_strong
+evidence_ratio_very_strong
+bayes_factor
+
+
+```
+
+An evidence ratio of `Inf` indicates strong evidence in favor of the first model over the second model. This does not necessarily mean overfitting, but rather that the first model is substantially more supported by the data according to the Bayes Factor. Overfitting is more related to the complexity of the model relative to the amount of data available. If the first model is more complex and still has significantly stronger support, it suggests that the complexity is justified by the data. However, it's always a good idea to further validate the model's performance on independent data to ensure it generalizes well.
+
+**Visualize the regression coefficient posterior summary statistics for your best model.**
+
+```{r vispostPlot}
+viz_post_coefs <- function(post_means, post_sds, xnames)
+{
+  tibble::tibble(
+    mu = post_means,
+    sd = post_sds,
+    x = xnames
+  ) %>% 
+    mutate(x = factor(x, levels = xnames)) %>% 
+    ggplot(mapping = aes(x = x),color="red") +
+    geom_hline(yintercept = 0, color = 'black', linetype = 'dashed') +
+    geom_point(mapping = aes(y = mu),color="blue") +
+    geom_linerange(mapping = aes(ymin = mu - 2 * sd,
+                                 ymax = mu + 2 * sd,
+                                 group = x)) +
+    labs(x = 'feature', y = 'coefficient value') +
+    coord_flip() +
+    theme_bw()
+}
+
+```
+
+```{r visPlot9}
+viz_post_coefs(laplace_01_weak$mode[1:ncol(X01)],
+               sqrt(diag(laplace_01_weak$var_matrix)[1:ncol(X01)]),
+               colnames(X01))
+```
+
+
+```{r visPlot7}
+viz_post_coefs(laplace_02_weak$mode[1:ncol(X02)],
+               sqrt(diag(laplace_02_weak$var_matrix)[1:ncol(X02)]),
+               colnames(X02))
+```
+
+
+
+Calculate the MLE of 𝜎 using the lm() function
+
+```{r lmMLE}
+lm_09 <- lm(logit_response ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue) * (Lightness + Saturation), data = df_train)
+mle_sigma <- summary(lm_09)$sigma
+mle_sigma
+```
+
+
+**The posterior uncertainty on the likelihood noise (residual error), σ, for your linear model lm_09 and compare it with the maximum likelihood estimate (MLE)**
+
+```{r lmExtract}
+library(rstanarm)
+
+
+stan_fit <- stan_glm(logit_response ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue) * (Lightness + Saturation),
+                     data = df_train, family = gaussian())
+
+posterior_samples <- as.data.frame(stan_fit)
+sigma_posterior_mean <- mean(posterior_samples$sigma)
+sigma_posterior_ci <- quantile(posterior_samples$sigma, probs = c(0.025, 0.975))
+
+
+cat("MLE of sigma:", mle_sigma, "\n")
+cat("Posterior mean of sigma:", sigma_posterior_mean, "\n")
+cat("95% credible interval for sigma:", sigma_posterior_ci, "\n")
+
+
+prob_below_mle <- mean(pnorm(mle_sigma, mean = sigma_posterior_mean, sd = sd(posterior_samples$sigma)))
+cat("Probability that sigma is below the MLE:", prob_below_mle, "\n")
+
+
+
+```
+
+
+
+
+## Part iic: Linear Regression - Linear models Predictions
+
+Model 1:
+
+```{r mod7lm}
+Model1 <- lm(logit_response ~ (R + G + B + Hue)^2 * (Lightness + Saturation), data = df_train)
+
+```
+
+```{r mod7Plot}
+library(coefplot)
+coefplot(Model1)
+```
+
+Model 2:
+
+```{r mod9lm}
+Model2 <- lm(logit_response ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue) * (Lightness + Saturation), data = df_train)
+
+```
+
+```{r mod9lmPlot}
+coefplot(Model2)
+```
+
+
+**Best model considering training set only performance metrics**
+ 
+```{r Bestlm}
+extract_model_metrics <- function(model, model_name) {
+  broom::glance(model) %>% dplyr::mutate(model_name = model_name)
+}
+models <- list(Model1,Model2)
+model_names <- c("Model1", "Model2")
+model_metrics <- purrr::map2_dfr(models, model_names, extract_model_metrics)
+glimpse(model_metrics)
+```
+
+
+```{r AIClm}
+best_r_squared <- model_metrics %>% 
+                  dplyr::filter(r.squared == max(r.squared)) %>% 
+                  dplyr::pull(model_name)
+
+best_AIC <- model_metrics %>% 
+            dplyr::filter(AIC == min(AIC)) %>% 
+            dplyr::pull(model_name)
+
+best_BIC <- model_metrics %>% 
+            dplyr::filter(BIC == min(BIC)) %>% 
+            dplyr::pull(model_name)
+
+best_r_squared
+best_AIC
+best_BIC
+```
+
+
+**Define a prediction or visualization test grid**
+
+
+```{r viz_gridtest}
+
+unique_lightness <- unique(df_train$Lightness,2)
+unique_saturation <- unique(df_train$Saturation,2)
+
+viz_grid <- expand.grid(
+  R = seq(min(df_train$R), max(df_train$R), length.out = 2),
+  G = seq(min(df_train$G), max(df_train$G), length.out = 2),
+  B = seq(min(df_train$B), max(df_train$B), length.out = 2),
+  Hue = seq(min(df_train$Hue), max(df_train$Hue), length.out = 2),
+  Lightness = unique_lightness,
+  Saturation = unique_saturation
+)
+
+
+```
+
+```{r tidypredmod}
+tidy_predict <- function(mod, xnew)
+{
+  pred_df <- predict(mod, xnew, interval = "confidence") %>% 
+    as.data.frame() %>% tibble::as_tibble() %>% 
+    dplyr::select(pred = fit, ci_lwr = lwr, ci_upr = upr) %>% 
+    bind_cols(predict(mod, xnew, interval = 'prediction') %>% 
+                as.data.frame() %>% tibble::as_tibble() %>% 
+                dplyr::select(pred_lwr = lwr, pred_upr = upr))
+  
+  xnew %>% bind_cols(pred_df)
+}
+```
+
+```{r viz_grid1mod}
+pred_Model1 <- tidy_predict(Model1, viz_grid)
+pred_Model1
+```
+
+```{r viz_grid2mod}
+pred_Model2 <- tidy_predict(Model2, viz_grid)
+pred_Model2
+```
+
+To visualize the predictive trends as per the provided style,  R is used as the primary input for the x-axis and another input Lightness as the secondary input for faceting.
+
+```{r viz_pred1plot}
+
+pred_Model1 %>%
+  ggplot(aes(x = R, y = pred)) +
+  geom_ribbon(aes(ymin = pred_lwr, ymax = pred_upr), fill = "orange", alpha = 0.5) +
+  geom_ribbon(aes(ymin = ci_lwr, ymax = ci_upr), fill = "purple", alpha = 0.5) +
+  geom_line() +
+  coord_cartesian(ylim = c(-7, 7)) +
+  facet_wrap(~Lightness) +
+  labs(title = "Model 1 Predictions",  # Adjust the title to match the model number
+       x = "R",
+       y = "Predicted Response") +
+  theme_minimal()
+```
+
+
+```{r viz_pred2plot}
+
+pred_Model2 %>%
+  ggplot(aes(x = R, y = pred)) +
+  geom_ribbon(aes(ymin = pred_lwr, ymax = pred_upr), fill = "orange", alpha = 0.5) +
+  geom_ribbon(aes(ymin = ci_lwr, ymax = ci_upr), fill = "purple", alpha = 0.5) +
+  geom_line() +
+  coord_cartesian(ylim = c(-7, 7)) +
+  facet_wrap(~Lightness) +
+  labs(title = "Model 2 Predictions",  # Adjust the title to match the model number
+       x = "R",
+       y = "Predicted Response") +
+  theme_minimal()
+```
+
+
+## Part iid: Linear Regression - Train/tune with resampling
+
+
+The resampling scheme is specified by the trainControl() function in caret. The type of scheme is controlled by the method argument. For k-fold cross-validation, the method argument must equal 'cv' and the number of folds is controlled by the number argument.
+
+```{r resample}
+my_ctrl <- trainControl(method = "cv", number = 5)
+```
+
+“RMSE” (Root Mean Squared Error) is the primary performance metric as it provides a good indication of how well the model’s predictions align with the observed data, giving equal weight to all errors
+
+```{r rmse}
+my_metric <- "RMSE"
+```
+
+**Linear models**
+
+
+
+Model 1: All categorical and continuous variables – linear additive
+
+```{r model1lmt}
+
+mod1 <- train(
+  logit_response ~ R + G + B + Hue + Lightness + Saturation,
+  data = df_train,
+  method = "lm",
+  metric = my_metric,
+  trControl = my_ctrl
+)
+mod1
+
+```
+
+Model 2: Interaction of the categorical inputs with all continuous inputs main effects
+
+```{r model2lmt}
+
+mod2 <- train(
+  logit_response ~ (R + G + B + Hue) * (Lightness + Saturation),
+  data = df_train,
+  method = "lm",
+  metric = my_metric,
+  trControl = my_ctrl
+)
+mod2
+```
+
+Model 3: Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+
+```{r model3lmt}
+
+mod3 <- train(
+  logit_response ~ (R + G + B + Hue)^2 + Lightness + Saturation,
+  data = df_train,
+  method = "lm",
+  metric = my_metric,
+  trControl = my_ctrl
+)
+mod3
+
+```
+
+Model 4: Interaction of the categorical inputs with all main effect and all pairwise interactions of continuous inputs
+
+```{r model4lmt}
+
+mod4 <- train(
+  logit_response ~ (R + G + B + Hue)^2 * (Lightness + Saturation),
+  data = df_train,
+  method = "lm",
+  metric = my_metric,
+  trControl = my_ctrl
+)
+mod4
+
+```
+**Best Performing Model: RMSE**
+
+
+```{r tibblelmt}
+
+results = resamples(list(fit_01 = mod1,
+                         fit_02 = mod2,
+                         fit_03 = mod3,
+                         fit_04 = mod4))
+summary_resampling <- summary(results, metric = my_metric)
+summary_resampling
+```
+```{r plotlmt}
+
+dotplot_resampling <- dotplot(results, metric = my_metric)
+dotplot_resampling
+```
+
+
+
+The model with the lowest RMSE is fit_04. It has an RMSE of  0.05626569, which is the smallest among all the models. 
+
+**Compare the coefficients between the top 3 models identified by the resampling procedure using the coefplot::multiplot() function.**
+
+```{r corfplot}
+lm_model_3 <- mod1$finalModel
+lm_model_2 <- mod2$finalModel
+lm_model_1 <- mod3$finalModel
+
+coefplot::multiplot(lm_model_3, lm_model_2, lm_model_1, dodgeHeight = 0.35) +
+  theme_bw() +
+  theme(legend.position = 'bottom')
+```
+
+
+
+**Regularized regression with Elastic net**
+
+
+```{r mod1Elastic}
+#Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+set.seed(2001)
+mod1_elastic_net <- train(
+  logit_response ~ (R + G + B + Hue)^2 + Lightness + Saturation,
+  data = df_train,
+  method = "glmnet",
+  tuneGrid = expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(0.001, 0.1, 0.001)),
+  trControl = my_ctrl
+)
+mod1_elastic_net
+
+```
+
+
+
+
+```{r mod2Elastic}
+#Interaction terms between the polynomial-transformed continuous variables and the categorical variables
+set.seed(2001)
+mod2_elastic_net <- train(
+  logit_response ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue) * (Lightness + Saturation),
+  data = df_train,
+  method = "glmnet",
+  tuneGrid = expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(0.001, 0.1, 0.001)),
+  trControl = my_ctrl
+)
+mod2_elastic_net
+```
+
+```{r mod3Elastic}
+
+#Interaction terms between the polynomial-transformed continuous variables themselves
+set.seed(2001)
+mod3_elastic_net <- train(
+   logit_response ~ poly(R, 2) * poly(G, 2) + poly(R, 2) * poly(B, 2) + poly(R, 2) * poly(Hue, 2) + poly(G, 2) * poly(B, 2) + poly(G, 2) * poly(Hue, 2) + poly(B, 2) * poly(Hue, 2),
+  data = df_train,
+  method = "glmnet",
+  tuneGrid = expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(0.001, 0.1, 0.001)),
+  trControl = my_ctrl
+)
+mod3_elastic_net
+```
+
+
+**Best Performing Model:RMSE**
+
+```{r result}
+ElasticNetresults = resamples(list(fit_E01 = mod1_elastic_net,
+                                  fit_E02 = mod2_elastic_net,
+                                  fit_E03 = mod3_elastic_net))
+summary_elastic <- summary(ElasticNetresults, metric = my_metric)
+summary_elastic
+```
+
+
+```{r resultplot}
+dotplot_resampling_EN<- dotplot(ElasticNetresults, metric = my_metric)
+dotplot_resampling_EN
+```
+
+The model with the lowest RMSE is fit_E03.
+
+
+**Neural Network**
+
+```{r NN1}
+#Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+set.seed(2001)
+mod_nn1 <- train(
+  logit_response ~ (R + G + B + Hue)^2 + Lightness + Saturation,
+  data = df_train,
+  method = "nnet",
+  trControl = my_ctrl,
+  tuneGrid = expand.grid(size = c(1, 5, 10), decay = c(0, 0.001, 0.01))
+)
+mod_nn1
+```
+
+
+```{r NN2}
+#Interaction terms between the polynomial-transformed continuous variables and the categorical variables
+set.seed(2001)
+mod_nn2 <- train(
+  logit_response ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue) * (Lightness + Saturation),
+  data = df_train,
+  method = "nnet",
+  trControl = my_ctrl,
+  tuneGrid = expand.grid(size = c(1, 5, 10), decay = c(0, 0.001, 0.01))
+)
+mod_nn2
+```
+
+
+```{r NN3}
+#Interaction terms between the polynomial-transformed continuous variables themselves
+set.seed(2001)
+mod_nn3 <- train(
+  logit_response ~ poly(R, 2) * poly(G, 2) + poly(R, 2) * poly(B, 2) + poly(R, 2) * poly(Hue, 2) + poly(G, 2) * poly(B, 2) + poly(G, 2) * poly(Hue, 2) + poly(B, 2) * poly(Hue, 2),
+  data = df_train,
+  method = "nnet",
+  trControl = my_ctrl,
+  tuneGrid = expand.grid(size = c(1, 5, 10), decay = c(0, 0.001, 0.01))
+)
+mod_nn3
+```
+**Best Performing Model:RMSE**
+
+```{r NNSummary}
+NNresults = resamples(list(fit_N01 = mod_nn1,
+                                  fit_N02 = mod_nn2,
+                                  fit_N03 = mod_nn3))
+summary_nn <- summary(NNresults, metric = my_metric)
+summary_nn
+```
+
+```{r NNPlot}
+dotplot_resamplingNN <- dotplot(NNresults, metric = my_metric)
+dotplot_resamplingNN
+```
+
+The model with the lowest RMSE is fit_N03.
+
+**Random forest**
+
+```{r RF1}
+
+# Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+set.seed(2001)
+mod_rf1 <- train(
+  logit_response ~ (R + G + B + Hue)^2 + Lightness + Saturation,
+  data = df_train,
+  method = "rf",
+  trControl = my_ctrl
+)
+mod_rf1
+```
+
+```{r RF2}
+
+# Interaction terms between the polynomial-transformed continuous variables and the categorical variables
+set.seed(2001)
+mod_rf2 <- train(
+  logit_response ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue) * (Lightness + Saturation),
+  data = df_train,
+  method = "rf",
+  trControl = my_ctrl
+)
+mod_rf2
+```
+
+```{r RF3}
+
+# Interaction terms between the polynomial-transformed continuous variables and the categorical variables
+set.seed(2001)
+mod_rf3 <- train(
+    logit_response ~ poly(R, 2) * poly(G, 2) + poly(R, 2) * poly(B, 2) + poly(R, 2) * poly(Hue, 2) + poly(G, 2) * poly(B, 2) + poly(G, 2) * poly(Hue, 2) + poly(B, 2) * poly(Hue, 2),
+  data = df_train,
+  method = "rf",
+  trControl = my_ctrl
+)
+mod_rf3
+```
+
+**Best Performing Model:RMSE**
+
+```{r RFSummary}
+RFresults = resamples(list(fit_RF01 = mod_rf1,
+                                  fit_RF02 = mod_rf2,
+                                  fit_RF03 = mod_rf3))
+summary_RF <- summary(RFresults, metric = my_metric)
+summary_RF
+
+```
+
+```{r RFSummaryPlot}
+dotplot_resamplingRF <- dotplot(RFresults, metric = my_metric)
+dotplot_resamplingRF
+
+```
+
+The Model with lowest RMSE is fit_RF01.
+
+
+**Gradient boosted tree**
+
+```{r GBT1}
+#Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+library(gbm)
+set.seed(2001)
+mod_gbt1 <- train(
+  logit_response ~ (R + G + B + Hue)^2 + Lightness + Saturation,
+  data = df_train,
+  method = "gbm",
+  trControl = my_ctrl,
+  verbose = FALSE
+)
+mod_gbt1
+```
+
+```{r GBT2}
+#Interaction terms between the polynomial-transformed continuous variables and the categorical variables
+set.seed(2001)
+mod_gbt2 <- train(
+  logit_response ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue) * (Lightness + Saturation),
+  data = df_train,
+  method = "gbm",
+  trControl = my_ctrl,
+  verbose = FALSE
+)
+mod_gbt2
+```
+
+```{r GBT3}
+#Interaction terms between the polynomial-transformed continuous variables themselves
+set.seed(2001)
+mod_gbt3 <- train(
+  logit_response ~ poly(R, 2) * poly(G, 2) + poly(R, 2) * poly(B, 2) + poly(R, 2) * poly(Hue, 2) + poly(G, 2) * poly(B, 2) + poly(G, 2) * poly(Hue, 2) + poly(B, 2) * poly(Hue, 2),
+  data = df_train,
+  method = "gbm",
+  trControl = my_ctrl,
+  verbose = FALSE
+)
+mod_gbt3
+```
+
+**Best Performing Model:RMSE**
+
+```{r GBTSummary}
+GBTresults = resamples(list(fit_GBT01 = mod_gbt1,
+                                  fit_GBT02 = mod_gbt2,
+                                  fit_GBT03 = mod_gbt3))
+summary_GBT <- summary(GBTresults, metric = my_metric)
+summary_GBT 
+
+```
+
+
+```{r GBTPlot}
+dotplot_resamplingGBT <- dotplot(GBTresults, metric = my_metric)
+dotplot_resamplingGBT
+
+```
+
+The model with the lowest RMSE is fit_GBT02.
+
+**Support Vector Machine (SVM)**
+
+```{r SVM1}
+#Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+library(kernlab)
+set.seed(2001)
+mod_svm1 <- train(
+  logit_response ~ (R + G + B + Hue)^2 + Lightness + Saturation,
+  data = df_train,
+  method = "svmRadial",
+  trControl = my_ctrl,
+  tuneGrid = expand.grid(sigma = 0.1, C = 1)
+)
+mod_svm1
+```
+
+
+```{r SVM2}
+#Interaction terms between the polynomial-transformed continuous variables and the categorical variables
+
+set.seed(2001)
+mod_svm2 <- train(
+  logit_response ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue) * (Lightness + Saturation),
+  data = df_train,
+  method = "svmRadial",
+  trControl = my_ctrl,
+  tuneGrid = expand.grid(sigma = 0.1, C = 1)
+)
+mod_svm2
+```
+
+
+```{r SVM3}
+#Interaction terms between the polynomial-transformed continuous variables themselves
+
+set.seed(2001)
+mod_svm3 <- train(
+   logit_response ~ poly(R, 2) * poly(G, 2) + poly(R, 2) * poly(B, 2) + poly(R, 2) * poly(Hue, 2) + poly(G, 2) * poly(B, 2) + poly(G, 2) * poly(Hue, 2) + poly(B, 2) * poly(Hue, 2),
+  data = df_train,
+  method = "svmRadial",
+  trControl = my_ctrl,
+  tuneGrid = expand.grid(sigma = 0.1, C = 1)
+)
+mod_svm3
+```
+
+**Best Performing Model: RMSE**
+
+```{r SVMSummary}
+SVMresults = resamples(list(fit_SVM01 = mod_svm1,
+                                  fit_SVM02 = mod_svm2,
+                                  fit_SVM03 = mod_svm3))
+summary_SVM <- summary(SVMresults, metric = my_metric)
+summary_SVM
+```
+
+```{r SVMPlot}
+dotplot_resamplingSVM <- dotplot(SVMresults, metric = my_metric)
+dotplot_resamplingSVM
+```
+
+The model with lowest RMSE is fit_SVM01.
+
+**k-Nearest Neighbors (k-NN)**
+
+
+```{r KNN1}
+
+#Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+set.seed(2001)
+mod_knn1 <- train(logit_response ~ (R + G + B + Hue)^2 + Lightness + Saturation,
+  data = df_train,
+  method = "knn",
+  trControl = my_ctrl,
+  tuneGrid = expand.grid(k = c(5, 10, 15))
+)
+mod_knn1
+```
+
+```{r KNN2}
+#  Interaction terms between the polynomial-transformed continuous variables and the categorical variables
+set.seed(2001)
+mod_knn2 <- train(
+  logit_response ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + Hue) * (Lightness + Saturation),
+  data = df_train,
+  method = "knn",
+  trControl = my_ctrl,
+  tuneGrid = expand.grid(k = c(5, 10, 15))
+)
+mod_knn2 
+
+```
+
+```{r KNN3}
+# Interaction terms between the polynomial-transformed continuous variables themselves
+
+set.seed(2001)
+mod_knn3 <- train(
+  logit_response ~ poly(R, 2) * poly(G, 2) + poly(R, 2) * poly(B, 2) + poly(R, 2) * poly(Hue, 2) + poly(G, 2) * poly(B, 2) + poly(G, 2) * poly(Hue, 2) + poly(B, 2) * poly(Hue, 2),
+  data = df_train,
+  method = "knn",
+  trControl = my_ctrl,
+  tuneGrid = expand.grid(k = c(5, 10, 15))
+)
+mod_knn3 
+
+```
+
+**Best Performing Model: RMSE**
+
+```{r KNNSummary}
+KNNresults = resamples(list(fit_KNN01 = mod_knn1,
+                                  fit_KNN02 = mod_knn2,
+                                  fit_KNN03 = mod_knn3))
+summary_KNN <- summary(KNNresults, metric = my_metric)
+summary_KNN
+```
+
+```{r KNNPlot}
+dotplot_resamplingKNN<- dotplot(KNNresults, metric = my_metric)
+dotplot_resamplingKNN
+
+
+```
+
+The model with the lowest RMSE is fit_KNN01.
+
+
+
+
+
+
+
